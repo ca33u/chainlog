@@ -6,7 +6,7 @@
 ## Version: 1.0.0
 ## X-License: MIT
 ## X-Website: https://addicted.sh
-## IconTexture: Interface\Icons\INV_Misc_Book_09
+## IconTexture: Interface\AddOns\Chainlog\Media\icon
 ## Category: Quests
 ## Dependencies: QuestieDB
 ## OptionalDeps: TomTom
