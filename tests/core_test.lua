@@ -181,6 +181,31 @@ Check(Gd.chain == nil and ChainlogDB.guide == nil, "chain finished: guide stops"
 Check(Gd.Describe(nil) == "Chain finished!", "finished text")
 Gd.Start(3)
 Check(Gd.chain == nil or Gd.step == nil, "an already finished chain stops at once")
+-- dungeon targets and the tracker
+LoadFile("Tracker.lua")
+local TRK = NS.Tracker
+done, log = { [1] = true, [2] = true }, { [3] = true }
+C.player.complete = function() return false end
+local objs = { { text = "Boss slain: 0/1", finished = false } }
+C.player.objectives = function(id) return id == 3 and objs or nil end
+d = C.index.dungeons[1] -- the window rebuilt the index above
+local tg = C.DungeonTargets(d, C.DungeonChains(d))
+Check(#tg == 1 and tg[1].kind == "kill" and tg[1].name == "Boss", "inside: kill the boss for the active quest")
+Check(not C.TargetDone(tg[1]), "boss not done yet")
+objs[1].finished = true
+Check(C.TargetDone(tg[1]), "boss ticked off from the quest log line")
+GetInstanceInfo = function() return "Test Hold", "party", 1, "", 5, 0, false, 9999 end
+Check(C.CurrentDungeon() == d, "current dungeon found by name")
+objs[1].finished = false
+local tl, left = TRK.Collect(d, C.DungeonChains(d))
+Check(#tl == 1 and left == 1, "tracker lists the boss")
+log[3] = nil; done[3] = true
+tl, left = TRK.Collect(d, C.DungeonChains(d))
+Check(#tl == 1 and left == 0 and tl[1].done, "quest turned in: the line stays, ticked")
+Check(pcall(TRK.Refresh), "tracker panel renders")
+GetInstanceInfo = function() return "Elsewhere", "none" end
+Check(C.CurrentDungeon() == nil, "outside: no dungeon")
+
 QUESTS[9] = { name = "Deliver", questLevel = 20, finishedBy = { { 51 } }, childQuests = { 10 } }
 QUESTS[10] = { name = "After", questLevel = 21, preQuestSingle = { 9 }, startedBy = { { 51 } } }
 log[9] = true

@@ -19,5 +19,6 @@ Core.lua
 Util.lua
 Window.lua
 Guide.lua
+Tracker.lua
 Abandon.lua
 Minimap.lua

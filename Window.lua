@@ -104,6 +104,11 @@ function UI.BuildNow()
 	Finish()
 end
 
+-- Chains of a dungeon (after the index is built).
+function UI.ChainsFor(d)
+	return d and chainsByArea[d.area] or nil
+end
+
 function UI.IsBuilt()
 	return built
 end
@@ -541,6 +546,43 @@ local function RenderChains(header, chains, highlight)
 		y = y + 6
 	end
 
+	-- inside the dungeon: what your quests need there
+	local targets = header and header.targets
+	if targets and #targets > 0 then
+		hi = hi + 1
+		local h = Head(hi)
+		h:ClearAllPoints()
+		h:SetPoint("TOPLEFT", 0, -y)
+		h:SetWidth(width)
+		h.text:SetText("|cffe8a33a" .. T("Inside: what your quests need") .. "|r")
+		h.right:SetText("")
+		h.line:Show()
+		h:SetScript("OnClick", nil)
+		if h.lead then h.lead:Hide() end
+		h:Show()
+		y = y + HEAD_H
+		local TR = ns.Tracker
+		for _, t in ipairs(targets) do
+			ri = ri + 1
+			local r = Row(ri)
+			r:ClearAllPoints()
+			r:SetPoint("TOPLEFT", 8, -y)
+			r:SetWidth(width - 8)
+			r.quest = nil
+			local doneT = C.TargetDone(t)
+			r.icon:SetTexture(doneT and TR.ICON.done or TR.ICON[t.kind] or TR.ICON.kill)
+			if r.icon.SetDesaturated then r.icon:SetDesaturated(false) end
+			r.name:SetText(TR.Label(t))
+			r.state:SetText(T(t.kind == "talk" and "talk" or t.kind == "kill" and "kill" or t.kind == "use" and "use" or "loot"))
+			r.where:SetText(T("for") .. ": " .. TR.For(t))
+			r.mark:Hide()
+			r:SetAlpha(doneT and 0.5 or 1)
+			r:Show()
+			y = y + ROW_H
+		end
+		y = y + 8
+	end
+
 	for n, chain in ipairs(chains) do
 		local list = {}
 		local doneCount = 0
@@ -665,6 +707,9 @@ local function RenderDungeons()
 				print("|cffe8a33aChainlog|r " .. string.format(T("Waypoint set: %s"), d.name .. " - " .. zone))
 			end
 		end
+	end
+	if ns.Tracker then
+		header.targets = C.DungeonTargets(d, chainsByArea[d.area])
 	end
 	RenderChains(header, chainsByArea[d.area])
 end
@@ -833,6 +878,8 @@ SlashCmdList.CHAINLOG = function(msg)
 	elseif cmd == "warn" then
 		DB().warn = not DB().warn
 		print(P .. T("abandon warning:") .. " " .. (DB().warn and T("on") or T("off")))
+	elseif cmd == "tracker" then
+		if ns.Tracker then ns.Tracker.Toggle() end
 	elseif cmd == "stop" then
 		if ns.Guide then ns.Guide.Stop() end
 	elseif cmd == "next" then
@@ -851,6 +898,7 @@ SlashCmdList.CHAINLOG = function(msg)
 		print("  /chainlog log      " .. T("My quests"))
 		print("  /chainlog next     " .. T("Lead me through this chain"))
 		print("  /chainlog stop     " .. T("Stop leading"))
+		print("  /chainlog tracker  " .. T("dungeon checklist:"))
 		print("  /chainlog warn     " .. T("abandon warning:"))
 		print("  /chainlog minimap  " .. T("minimap button:"))
 	else

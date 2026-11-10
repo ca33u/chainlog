@@ -128,6 +128,11 @@ C.source = {
 		local m = areaMap[areaId]
 		return (m and m > 0) and m or nil
 	end,
+	instanceArea = function(instanceID)
+		local z = _G.LibQuestieDB and _G.LibQuestieDB.Support and Call(_G.LibQuestieDB.Support.Get, "ZoneDB")
+		local t = type(z) == "table" and type(z.instanceIdToAreaId) == "table" and z.instanceIdToAreaId
+		return t and t[instanceID] or nil
+	end,
 	areaName = function(areaId)
 		local name = C_Map and Call(C_Map.GetAreaInfo, areaId)
 		return type(name) == "string" and name ~= "" and name or nil
@@ -176,6 +181,9 @@ C.player = {
 	done = IsDone,
 	inLog = InLog,
 	complete = IsComplete,
+	objectives = function(id)
+		return C_QuestLog and Call(C_QuestLog.GetQuestObjectives, id) or nil
+	end,
 }
 
 ------------------------------------------------------------------------
@@ -649,7 +657,9 @@ function C.Here()
 	return { map = map, x = x * 100, y = y * 100 }
 end
 
--- Candidate spots { area, x, y, name } for one spawn table.
+-- Candidate spots { area, x, y, name } for one spawn table. Spawns inside a
+-- dungeon have no coordinates in the data (-1, -1); they count once, as
+-- "inside", and a waypoint to them points at the dungeon entrance.
 local function AddSpots(out, spawns, name)
 	if type(spawns) ~= "table" then
 		return
@@ -659,6 +669,8 @@ local function AddSpots(out, spawns, name)
 			for k, p in ipairs(list) do
 				if type(p) == "table" and type(p[1]) == "number" and p[1] > 0 then
 					out[#out + 1] = { area = area, x = p[1], y = p[2], name = name }
+				elseif k == 1 and C.index and C.index.byArea[area] then
+					out[#out + 1] = { area = area, x = -1, y = -1, name = name, inside = true }
 				end
 				if k >= 40 then
 					break -- enough to pick from
@@ -745,6 +757,205 @@ function C.ObjectiveSpot(id, here)
 		end
 	end
 	return best
+end
+
+------------------------------------------------------------------------
+-- Targets inside a dungeon: who to kill, what to loot, whom to talk to
+------------------------------------------------------------------------
+
+local function InDungeon(spawns, d)
+	if type(spawns) ~= "table" or not C.index then
+		return false
+	end
+	for area in pairs(spawns) do
+		if C.index.byArea[area] == d then
+			return true
+		end
+	end
+	return false
+end
+
+-- Targets for your open quests of dungeon `d` (from its chains):
+-- list of { key, kind = "talk"|"kill"|"loot"|"use", name, item, quests = {ids} }
+local MANY = 3 -- more droppers than this: list the item once
+
+function C.DungeonTargets(d, chains)
+	local byKey, list = {}, {}
+	local function Add(key, kind, name, item, quest, order, role)
+		local t = byKey[key]
+		if not t then
+			t = { key = key, kind = kind, name = name or "?", item = item, quests = {}, roles = {}, order = order }
+			byKey[key] = t
+			list[#list + 1] = t
+		end
+		t.roles[quest] = t.roles[quest] or role
+		for _, q in ipairs(t.quests) do
+			if q == quest then
+				return
+			end
+		end
+		t.quests[#t.quests + 1] = quest
+	end
+	local npc, obj, item = C.source.npc, C.source.object, C.source.item
+	for _, chain in ipairs(chains or {}) do
+		for _, id in ipairs(chain) do
+			local st = C.Status(id)
+			if st == "available" or st == "level" then
+				-- picked up inside
+				local by = Q(id, "startedBy")
+				for _, n in ipairs(List(type(by) == "table" and by[1])) do
+					if InDungeon(npc(n, "spawns"), d) then
+						Add("talk:" .. n, "talk", npc(n, "name"), nil, id, 1, "take")
+					end
+				end
+			elseif st == "active" or st == "ready" then
+				if st == "ready" then
+					local by = Q(id, "finishedBy")
+					for _, n in ipairs(List(type(by) == "table" and by[1])) do
+						if InDungeon(npc(n, "spawns"), d) then
+							Add("talk:" .. n, "talk", npc(n, "name"), nil, id, 1, "turnin")
+						end
+					end
+				end
+				local o = Q(id, "objectives")
+				if type(o) == "table" then
+					for _, e in ipairs(List(o[1])) do
+						if type(e) == "table" and InDungeon(npc(e[1], "spawns"), d) then
+							Add("kill:" .. e[1], "kill", npc(e[1], "name"), nil, id, 2)
+						end
+					end
+					for _, e in ipairs(List(o[2])) do
+						if type(e) == "table" and InDungeon(obj(e[1], "spawns"), d) then
+							Add("use:" .. e[1], "use", obj(e[1], "name"), nil, id, 3)
+						end
+					end
+					for _, e in ipairs(List(o[3])) do
+						if type(e) == "table" and e[1] then
+							local iname = item(e[1], "name")
+							local droppers = {}
+							for _, n in ipairs(List(item(e[1], "npcDrops"))) do
+								if InDungeon(npc(n, "spawns"), d) then
+									droppers[#droppers + 1] = { "loot:" .. e[1] .. ":" .. n, npc(n, "name"), 2 }
+								end
+							end
+							for _, ob in ipairs(List(item(e[1], "objectDrops"))) do
+								if InDungeon(obj(ob, "spawns"), d) then
+									droppers[#droppers + 1] = { "loot:" .. e[1] .. ":o" .. ob, obj(ob, "name"), 3 }
+								end
+							end
+							local found = #droppers > 0
+							if #droppers > MANY then
+								-- drops from lots of trash: one line for the item
+								Add("item:" .. e[1], "loot", iname, nil, id, 4)
+								local t = byKey["item:" .. e[1]]
+								t.many = #droppers
+							else
+								for _, x in ipairs(droppers) do
+									Add(x[1], "loot", x[2], iname, id, x[3])
+								end
+							end
+							if not found and C.DungeonOf(id) == d and iname then
+								-- dropped by many trash mobs: list the item itself
+								Add("item:" .. e[1], "loot", nil, iname, id, 4)
+							end
+						end
+					end
+					for _, e in ipairs(List(o[5])) do
+						if type(e) == "table" then
+							for _, n in ipairs(List(e[1])) do
+								if InDungeon(npc(n, "spawns"), d) then
+									Add("kill:" .. n, "kill", npc(n, "name"), nil, id, 2)
+								end
+							end
+						end
+					end
+				end
+				-- "find X" quests: the person you report to is inside
+				if st == "active" then
+					local by = Q(id, "finishedBy")
+					for _, n in ipairs(List(type(by) == "table" and by[1])) do
+						if InDungeon(npc(n, "spawns"), d) then
+							Add("talk:" .. n, "talk", npc(n, "name"), nil, id, 1, "report")
+						end
+					end
+				end
+			end
+		end
+	end
+	for _, t in ipairs(list) do
+		if t.name == "?" and t.item then
+			t.name = t.item
+			t.item = nil
+		end
+	end
+	table.sort(list, function(a, b)
+		if a.order ~= b.order then
+			return a.order < b.order
+		end
+		return a.name < b.name
+	end)
+	return list
+end
+
+-- Is this target finished? Uses the quest log's objective lines when the
+-- quest is in progress, so one boss of a two-boss quest can be ticked off.
+function C.TargetDone(t)
+	local P = C.player
+	local all = true
+	for _, q in ipairs(t.quests) do
+		local st = C.Status(q)
+		if t.kind == "talk" then
+			local role = t.roles and t.roles[q]
+			local ok = st == "done"
+				or (role == "take" and (st == "active" or st == "ready"))
+				or (role == "report" and st == "ready")
+			if not ok then
+				all = false
+			end
+		elseif st == "active" then
+			local objs = P.objectives and P.objectives(q)
+			local matched, finished = false, false
+			if type(objs) == "table" then
+				local want = (t.item or t.name or ""):lower()
+				for _, o in ipairs(objs) do
+					local text = type(o) == "table" and type(o.text) == "string" and o.text:lower() or ""
+					if want ~= "" and text:find(want, 1, true) then
+						matched, finished = true, o.finished == true
+						break
+					end
+				end
+			end
+			if not (matched and finished) then
+				all = false
+			end
+		elseif st ~= "done" and st ~= "ready" then
+			all = false
+		end
+	end
+	return all
+end
+
+-- The dungeon you are in now, or nil.
+function C.CurrentDungeon()
+	if not C.index or type(GetInstanceInfo) ~= "function" then
+		return nil
+	end
+	local ok, name, kind, _, _, _, _, _, instanceID = pcall(GetInstanceInfo)
+	if not ok or (kind ~= "party" and kind ~= "raid") then
+		return nil
+	end
+	local map = C.source.instanceArea and C.source.instanceArea(instanceID)
+	if map and C.index.byArea[map] then
+		return C.index.byArea[map]
+	end
+	if type(name) == "string" then
+		for _, d in ipairs(C.index.dungeons) do
+			if d.name == name then
+				return d
+			end
+		end
+	end
+	return nil
 end
 
 function C.AreaName(area)
