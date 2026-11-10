@@ -12,6 +12,7 @@
 ## OptionalDeps: TomTom
 ## SavedVariables: ChainlogDB
 ## AddonCompartmentFunc: Chainlog_OnAddonCompartmentClick
+## X-Wago-ID: ZKxOBp6k
 
 Locale.lua
 Core.lua
