@@ -275,6 +275,7 @@ end
 ------------------------------------------------------------------------
 
 local leftButtons, rows, heads = {}, {}, {}
+local LeadButton
 
 local function LeftButton(i)
 	local b = leftButtons[i]
@@ -318,6 +319,40 @@ local function Head(i)
 		heads[i] = h
 	end
 	return h
+end
+
+-- "Lead" / "Stop" button on a chain heading.
+LeadButton = function(h, chain, leading)
+	if not h.lead then
+		h.lead = CreateFrame("Button", nil, h, "UIPanelButtonTemplate")
+		h.lead:SetSize(74, 18)
+		h.lead:SetPoint("RIGHT", h.right, "LEFT", -8, 0)
+	end
+	h.lead:SetText(leading and T("Stop") or T("Lead"))
+	h.lead:SetScript("OnClick", function()
+		if not ns.Guide then
+			return
+		end
+		if leading then
+			ns.Guide.Stop()
+		else
+			ns.Guide.Start(chain[#chain])
+		end
+	end)
+	h.lead:SetScript("OnEnter", function(self)
+		if GameTooltip then
+			GameTooltip:SetOwner(self, "ANCHOR_TOP")
+			GameTooltip:AddLine(leading and T("Stop leading") or T("Lead me through this chain"), 1, 0.82, 0)
+			if not leading then
+				GameTooltip:AddLine(T("TomTom's arrow (or the map pin) moves to the next quest giver, objective and turn-in by itself."), 0.9, 0.9, 0.9, true)
+			end
+			GameTooltip:Show()
+		end
+	end)
+	h.lead:SetScript("OnLeave", function()
+		if GameTooltip then GameTooltip:Hide() end
+	end)
+	h.lead:Show()
 end
 
 local function ShowTip(row)
@@ -486,6 +521,7 @@ local function RenderChains(header, chains, highlight)
 		h.text:SetText(header.title)
 		h.right:SetText(header.right or "")
 		h:SetScript("OnClick", header.onClick)
+		if h.lead then h.lead:Hide() end
 		h:Show()
 		y = y + HEAD_H
 		if header.sub then
@@ -497,6 +533,7 @@ local function RenderChains(header, chains, highlight)
 			s.text:SetText("|cff7fd4ff" .. header.sub .. "|r")
 			s.right:SetText("")
 			s.line:Hide()
+			if s.lead then s.lead:Hide() end
 			s:SetScript("OnClick", header.onSubClick)
 			s:Show()
 			y = y + HEAD_H
@@ -517,16 +554,18 @@ local function RenderChains(header, chains, highlight)
 			end
 		end
 		if #list > 0 then
-			if #chain > 1 then
+			if #chain > 1 or UI.forceChainHead then
 				hi = hi + 1
 				local h = Head(hi)
 				h:ClearAllPoints()
 				h:SetPoint("TOPLEFT", 0, -y)
 				h:SetWidth(width)
-				h.text:SetText("|cffe8a33a" .. T("chain") .. ":|r " .. C.Name(chain[#chain]))
+				local leading = ns.Guide and ns.Guide.IsLeading(chain)
+				h.text:SetText((leading and "|TInterface\\Minimap\\MiniMap-QuestArrow:14|t " or "") .. "|cffe8a33a" .. T("chain") .. ":|r " .. C.Name(chain[#chain]))
 				h.right:SetText(string.format("%d/%d", doneCount, #chain))
 				h.line:Show()
 				h:SetScript("OnClick", nil)
+				LeadButton(h, chain, leading)
 				h:Show()
 				y = y + HEAD_H
 			end
@@ -676,7 +715,9 @@ local function RenderLog()
 	UI.message:SetText("")
 	local chain = C.ChainOf(UI.selected)
 	local d = C.DungeonOf(UI.selected)
+	UI.forceChainHead = true
 	RenderChains({ title = C.Name(UI.selected), right = d and d.name or "" }, { chain }, UI.selected)
+	UI.forceChainHead = false
 end
 
 function UI.Refresh()
@@ -693,6 +734,12 @@ function UI.Refresh()
 		else
 			b:UnlockHighlight()
 		end
+	end
+	local G = ns.Guide
+	if G and G.chain then
+		UI.legend:SetText("|TInterface\\Minimap\\MiniMap-QuestArrow:12|t |cffffd100" .. G.Describe(G.step) .. "|r")
+	else
+		UI.legend:SetText(T("Click: waypoint to the quest giver"))
 	end
 	if not C.source.available() then
 		for _, b in ipairs(leftButtons) do b:Hide() end
@@ -786,6 +833,14 @@ SlashCmdList.CHAINLOG = function(msg)
 	elseif cmd == "warn" then
 		DB().warn = not DB().warn
 		print(P .. T("abandon warning:") .. " " .. (DB().warn and T("on") or T("off")))
+	elseif cmd == "stop" then
+		if ns.Guide then ns.Guide.Stop() end
+	elseif cmd == "next" then
+		if ns.Guide and ns.Guide.chain then
+			ns.Guide.Update(true)
+		else
+			print(P .. T("Not leading any chain. Press Lead on a chain in /chainlog."))
+		end
 	elseif cmd == "minimap" then
 		if ns.Minimap and ns.Minimap.Toggle then
 			ns.Minimap.Toggle()
@@ -794,6 +849,8 @@ SlashCmdList.CHAINLOG = function(msg)
 		print(P .. "by addicted · |cff7fd4ffaddicted.sh|r")
 		print("  /chainlog          " .. T("Dungeons"))
 		print("  /chainlog log      " .. T("My quests"))
+		print("  /chainlog next     " .. T("Lead me through this chain"))
+		print("  /chainlog stop     " .. T("Stop leading"))
 		print("  /chainlog warn     " .. T("abandon warning:"))
 		print("  /chainlog minimap  " .. T("minimap button:"))
 	else

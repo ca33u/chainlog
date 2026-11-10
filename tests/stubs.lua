@@ -30,7 +30,12 @@ local function Obj(extra)
 	o.GetChecked = function() return false end
 	o.CreateTexture = function() return Obj() end
 	o.CreateFontString = function() return Obj() end
-	return setmetatable(o, { __index = function() return function() end end })
+	-- methods (Capitalized) are no-ops; plain fields stay nil like in the game
+	return setmetatable(o, { __index = function(_, k)
+		if type(k) == "string" and k:match("^%u") then
+			return function() end
+		end
+	end })
 end
 StubObj = Obj
 function CreateFrame() return Obj() end

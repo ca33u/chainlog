@@ -625,6 +625,128 @@ function C.Ender(id)
 	return Who("finishedBy", id)
 end
 
+------------------------------------------------------------------------
+-- Where to do a quest's objectives
+------------------------------------------------------------------------
+
+-- Where the player is: { map = uiMapID, x = 0-100, y = 0-100 } or nil.
+function C.Here()
+	if not (C_Map and C_Map.GetBestMapForUnit) then
+		return nil
+	end
+	local map = Call(C_Map.GetBestMapForUnit, "player")
+	if type(map) ~= "number" then
+		return nil
+	end
+	local pos = Call(C_Map.GetPlayerMapPosition, map, "player")
+	if type(pos) ~= "table" and type(pos) ~= "userdata" then
+		return { map = map }
+	end
+	local ok, x, y = pcall(pos.GetXY, pos)
+	if not ok or type(x) ~= "number" or IsSecret(x) then
+		return { map = map }
+	end
+	return { map = map, x = x * 100, y = y * 100 }
+end
+
+-- Candidate spots { area, x, y, name } for one spawn table.
+local function AddSpots(out, spawns, name)
+	if type(spawns) ~= "table" then
+		return
+	end
+	for area, list in pairs(spawns) do
+		if type(area) == "number" and type(list) == "table" then
+			for k, p in ipairs(list) do
+				if type(p) == "table" and type(p[1]) == "number" and p[1] > 0 then
+					out[#out + 1] = { area = area, x = p[1], y = p[2], name = name }
+				end
+				if k >= 40 then
+					break -- enough to pick from
+				end
+			end
+		end
+	end
+end
+
+-- Every place an objective of the quest can be done.
+function C.ObjectiveSpots(id)
+	local out = {}
+	local o = Q(id, "objectives")
+	if type(o) == "table" then
+		for _, e in ipairs(List(o[1])) do -- creatures
+			if type(e) == "table" and e[1] then
+				AddSpots(out, C.source.npc(e[1], "spawns"), C.source.npc(e[1], "name"))
+			end
+		end
+		for _, e in ipairs(List(o[2])) do -- objects
+			if type(e) == "table" and e[1] then
+				AddSpots(out, C.source.object(e[1], "spawns"), C.source.object(e[1], "name"))
+			end
+		end
+		for _, e in ipairs(List(o[3])) do -- items: where they drop
+			if type(e) == "table" and e[1] then
+				local item = C.source.item(e[1], "name")
+				for k, npc in ipairs(List(C.source.item(e[1], "npcDrops"))) do
+					AddSpots(out, C.source.npc(npc, "spawns"), (C.source.npc(npc, "name") or "?") .. (item and (" (" .. item .. ")") or ""))
+					if k >= 6 then break end
+				end
+				for k, obj in ipairs(List(C.source.item(e[1], "objectDrops"))) do
+					AddSpots(out, C.source.object(obj, "spawns"), (C.source.object(obj, "name") or "?") .. (item and (" (" .. item .. ")") or ""))
+					if k >= 6 then break end
+				end
+			end
+		end
+		for _, e in ipairs(List(o[5])) do -- kill credit: { {npcIds}, creditId, text }
+			if type(e) == "table" then
+				for _, npc in ipairs(List(e[1])) do
+					AddSpots(out, C.source.npc(npc, "spawns"), C.source.npc(npc, "name"))
+				end
+			end
+		end
+	end
+	local trig = Q(id, "triggerEnd") -- { text, { [area] = {{x,y}} } }
+	if type(trig) == "table" then
+		AddSpots(out, trig[2], type(trig[1]) == "string" and trig[1] or nil)
+	end
+	return out
+end
+
+-- The objective spot to head for: nearest one on the map you are on,
+-- otherwise the one outside dungeons in the zone with the most spots.
+function C.ObjectiveSpot(id, here)
+	local spots = C.ObjectiveSpots(id)
+	if #spots == 0 then
+		return nil
+	end
+	here = here or C.Here()
+	if here and here.map then
+		local best, bestD
+		for _, s in ipairs(spots) do
+			if C.source.uiMap(s.area) == here.map then
+				local d = here.x and ((s.x - here.x) ^ 2 + (s.y - here.y) ^ 2) or 0
+				if not bestD or d < bestD then
+					best, bestD = s, d
+				end
+			end
+		end
+		if best then
+			return best
+		end
+	end
+	local count = {}
+	for _, s in ipairs(spots) do
+		count[s.area] = (count[s.area] or 0) + 1
+	end
+	local best, bestScore
+	for _, s in ipairs(spots) do
+		local score = count[s.area] + ((C.index and C.index.byArea[s.area]) and 0 or 1000)
+		if not bestScore or score > bestScore then
+			best, bestScore = s, score
+		end
+	end
+	return best
+end
+
 function C.AreaName(area)
 	if type(area) ~= "number" then
 		return nil
@@ -662,7 +784,9 @@ end
 ------------------------------------------------------------------------
 
 -- Sets a map waypoint (TomTom when installed, the game's own pin otherwise).
-function C.Waypoint(w, title)
+-- `arrow`: also point TomTom's arrow at it (quietly). Returns ok and a
+-- handle for C.RemoveWaypoint.
+function C.Waypoint(w, title, arrow)
 	if not (w and w.area and type(w.x) == "number" and type(w.y) == "number") then
 		return false
 	end
@@ -680,9 +804,10 @@ function C.Waypoint(w, title)
 	end
 	local tomtom = _G.TomTom
 	if type(tomtom) == "table" and type(tomtom.AddWaypoint) == "function" then
-		local ok = pcall(tomtom.AddWaypoint, tomtom, map, x / 100, y / 100, { title = title, from = "Chainlog", persistent = false })
+		local ok, uid = pcall(tomtom.AddWaypoint, tomtom, map, x / 100, y / 100,
+			{ title = title, from = "Chainlog", persistent = false, crazy = arrow or nil, silent = arrow or nil })
 		if ok then
-			return true
+			return true, uid
 		end
 	end
 	if C_Map and C_Map.SetUserWaypoint and UiMapPoint and UiMapPoint.CreateFromCoordinates then
@@ -692,9 +817,22 @@ function C.Waypoint(w, title)
 				C_SuperTrack.SetSuperTrackedUserWaypoint(true)
 			end
 		end)
-		return ok
+		return ok, ok and "game" or nil
 	end
 	return false
+end
+
+function C.RemoveWaypoint(handle)
+	if handle == "game" then
+		if C_Map and C_Map.ClearUserWaypoint then
+			pcall(C_Map.ClearUserWaypoint)
+		end
+	elseif type(handle) == "table" then
+		local tomtom = _G.TomTom
+		if type(tomtom) == "table" and type(tomtom.RemoveWaypoint) == "function" then
+			pcall(tomtom.RemoveWaypoint, tomtom, handle)
+		end
+	end
 end
 
 ------------------------------------------------------------------------

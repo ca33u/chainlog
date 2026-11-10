@@ -18,5 +18,6 @@ Locale.lua
 Core.lua
 Util.lua
 Window.lua
+Guide.lua
 Abandon.lua
 Minimap.lua

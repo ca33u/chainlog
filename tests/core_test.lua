@@ -12,8 +12,10 @@ local C = NS.Core
 --  8 unrelated quest in another zone
 local QUESTS = {
 	[1] = { name = "Lead In", questLevel = 20, requiredLevel = 18, breadcrumbForQuestId = 2, startedBy = { { 50 } } },
-	[2] = { name = "Prep", questLevel = 22, requiredLevel = 20, breadcrumbs = { 1 }, childQuests = { 3 }, startedBy = { { 51 } }, finishedBy = { { 51 } } },
-	[3] = { name = "Into The Dungeon", questLevel = 25, requiredLevel = 22, zoneOrSort = 100, preQuestSingle = { 2 }, startedBy = { { 51 } } },
+	[2] = { name = "Prep", questLevel = 22, requiredLevel = 20, breadcrumbs = { 1 }, childQuests = { 3 }, startedBy = { { 51 } }, finishedBy = { { 51 } },
+		objectives = { [3] = { { 901 } } } },
+	[3] = { name = "Into The Dungeon", questLevel = 25, requiredLevel = 22, zoneOrSort = 100, preQuestSingle = { 2 }, startedBy = { { 51 } }, finishedBy = { { 50 } },
+		objectives = { [1] = { { 60 } } } },
 	[4] = { name = "Alt Area Quest", questLevel = 26, requiredLevel = 24, zoneOrSort = 101, preQuestSingle = { 5, 6 }, startedBy = { nil, nil, { 900 } } },
 	[5] = { name = "Horde Prep", questLevel = 24, requiredLevel = 20, requiredRaces = 178 },
 	[6] = { name = "Alliance Prep", questLevel = 24, requiredLevel = 20, requiredRaces = 77 },
@@ -24,8 +26,9 @@ local NPCS = {
 	[50] = { name = "Scout", spawns = { [130] = { { 40.5, 50.5 } } } },
 	[51] = { name = "Elder", spawns = { [100] = { { 1, 1 } }, [130] = { { 44, 41 } } } },
 	[60] = { name = "Boss", spawns = { [100] = { { 50, 50 } } } },
+	[61] = { name = "Wolf", spawns = { [130] = { { 10, 10 }, { 80, 80 } } } },
 }
-local ITEMS = { [900] = { name = "Strange Map", npcDrops = { 60 } } }
+local ITEMS = { [900] = { name = "Strange Map", npcDrops = { 60 } }, [901] = { name = "Wolf Pelt", npcDrops = { 61 } } }
 local ids = {}
 for id in pairs(QUESTS) do ids[#ids + 1] = id end
 table.sort(ids)
@@ -129,4 +132,58 @@ C.LogQuests = function() return { 2, 8 } end
 local okL, errL = pcall(W.Open, "log")
 Check(okL, "my quests tab renders " .. tostring(errL or ""))
 Check(W.selected == 2, "my quests: the chain quest is selected, the lone one is left out")
+
+-- objective spots: nearest on the current map, else the most common zone
+local spots = C.ObjectiveSpots(2)
+Check(#spots == 2 and spots[1].name:find("Wolf Pelt", 1, true) ~= nil, "item objective: where it drops")
+local near = C.ObjectiveSpot(2, { map = 21, x = 75, y = 75 })
+Check(near and near.x == 80, "nearest spot on your map")
+Check(C.ObjectiveSpot(2, { map = 99 }).area == 130, "elsewhere: the zone with the spots")
+
+-- guide: follow the chain 1 -> 2 -> 3
+LoadFile("Guide.lua")
+local Gd = NS.Guide
+local added, removed = {}, 0
+TomTom = {
+	AddWaypoint = function(_, map, x, y, opts) local uid = { map, x, y, title = opts.title, crazy = opts.crazy }; added[#added + 1] = uid; return uid end,
+	RemoveWaypoint = function() removed = removed + 1 end,
+}
+done, log = {}, {}
+level = 23
+local okStart = pcall(Gd.Start, 2)
+Check(okStart and Gd.chain and #Gd.chain == 3, "start leading the chain of a middle step")
+Check(Gd.step and Gd.step.action == "take" and Gd.step.quest == 1, "first: take the lead-in")
+Check(#added == 1 and added[1].crazy == true and math.abs(added[1][2] - 0.405) < 1e-9, "arrow to the lead-in giver")
+done[1] = true
+Gd.Update()
+Check(Gd.step.action == "take" and Gd.step.quest == 2 and removed == 1, "lead-in done: arrow moves to the next giver")
+log[2] = true
+C.player.complete = function() return false end
+Gd.Update()
+Check(Gd.step.action == "do" and Gd.step.where and Gd.step.where.name:find("Wolf", 1, true), "in log: arrow to the objective")
+local before = #added
+Gd.Update()
+Check(#added == before, "same target: the waypoint is not reset")
+C.player.complete = function(id) return id == 2 end
+Gd.Update()
+Check(Gd.step.action == "turnin" and Gd.step.where.name == "Elder", "objectives done: arrow to the turn-in")
+log[2] = nil; done[2] = true
+C.player.complete = function() return false end
+Gd.Update()
+Check(Gd.step.action == "take" and Gd.step.quest == 3, "turned in: next step")
+log[3] = true
+Gd.Update()
+local last = added[#added]
+Check(Gd.step.action == "do" and last[1] == 21 and math.abs(last[2] - 0.6) < 1e-9, "objective inside the dungeon: arrow to the entrance")
+log[3] = nil; done[3] = true
+Gd.Update()
+Check(Gd.chain == nil and ChainlogDB.guide == nil, "chain finished: guide stops")
+Check(Gd.Describe(nil) == "Chain finished!", "finished text")
+Gd.Start(3)
+Check(Gd.chain == nil or Gd.step == nil, "an already finished chain stops at once")
+QUESTS[9] = { name = "Deliver", questLevel = 20, finishedBy = { { 51 } }, childQuests = { 10 } }
+QUESTS[10] = { name = "After", questLevel = 21, preQuestSingle = { 9 }, startedBy = { { 51 } } }
+log[9] = true
+local st = Gd.NextStep({ 9, 10 })
+Check(st.action == "turnin" and st.where and st.where.name == "Elder", "no objective spots: head for the turn-in")
 Report("core_test")
