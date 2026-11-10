@@ -1,0 +1,21 @@
+## Interface: 16001
+## Title: |cffe8a33aChainlog|r
+## Notes: Dungeon quest checklist: every dungeon's quests, their prep chains, where to pick them up, and a warning before you abandon a chain quest.
+## Notes-ruRU: Чеклист квестов подземелий: все квесты данжей, цепочки подготовки, где их брать, и предупреждение перед отказом от квеста из цепочки.
+## Author: addicted
+## Version: 1.0.0
+## X-License: MIT
+## X-Website: https://addicted.sh
+## IconTexture: Interface\Icons\INV_Misc_Book_09
+## Category: Quests
+## Dependencies: QuestieDB
+## OptionalDeps: TomTom
+## SavedVariables: ChainlogDB
+## AddonCompartmentFunc: Chainlog_OnAddonCompartmentClick
+
+Locale.lua
+Core.lua
+Util.lua
+Window.lua
+Abandon.lua
+Minimap.lua
