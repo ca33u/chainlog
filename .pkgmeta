@@ -1,0 +1,9 @@
+package-as: Chainlog
+
+ignore:
+  - tests
+  - install.sh
+  - .gitignore
+  - .github
+  - .pkgmeta
+  - RELEASING.md
