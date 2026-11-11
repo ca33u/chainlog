@@ -233,6 +233,34 @@ function C.RaceBit(race)
 	return race
 end
 
+-- Capitals (area IDs). A neutral NPC (Argent Dawn, Cenarion Circle) who
+-- stands in Darnassus is out of reach for the Horde all the same.
+C.CAPITALS = {
+	A = { [1519] = true, [1537] = true, [1657] = true }, -- Stormwind, Ironforge, Darnassus
+	H = { [1637] = true, [1638] = true, [1497] = true }, -- Orgrimmar, Thunder Bluff, Undercity
+}
+
+-- Does this NPC stand only in the other faction's capitals?
+function C.InEnemyCapital(npc, me)
+	local enemy = C.CAPITALS[me == "A" and "H" or "A"]
+	local zones = {}
+	local spawns = C.source.npc(npc, "spawns")
+	if type(spawns) == "table" then
+		for zone in pairs(spawns) do
+			zones[#zones + 1] = zone
+		end
+	end
+	if #zones == 0 then
+		zones[1] = C.source.npc(npc, "zoneID")
+	end
+	for _, zone in ipairs(zones) do
+		if not enemy[zone] then
+			return false
+		end
+	end
+	return #zones > 0
+end
+
 -- Is the quest giver (or, when an item or object starts it, the one who
 -- takes it back) friendly to your faction? Many quests carry no race mask:
 -- only their NPCs tell Alliance from Horde.
@@ -247,7 +275,9 @@ function C.FactionOK(id)
 		local known, friend = false, false
 		for _, npc in ipairs(npcs) do
 			local f = C.source.npc(npc, "friendlyToFaction")
-			if type(f) == "string" and f ~= "" then
+			if C.InEnemyCapital(npc, me) then
+				known = true -- neutral, but stands in the other side's capital
+			elseif type(f) == "string" and f ~= "" then
 				known = true
 				if f:find(me, 1, true) then
 					friend = true

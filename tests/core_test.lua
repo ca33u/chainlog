@@ -38,12 +38,16 @@ C.source.quest, C.source.npc, C.source.item = G(QUESTS), G(NPCS), G(ITEMS)
 NPCS[70] = { name = "Stormwind Guard", friendlyToFaction = "A" }
 NPCS[71] = { name = "Orgrimmar Grunt", friendlyToFaction = "H" }
 NPCS[72] = { name = "Goblin", friendlyToFaction = "AH" }
+NPCS[73] = { name = "Dawnwatcher", friendlyToFaction = "AH", zoneID = 1657, spawns = { [1657] = { { 55, 25 } } } }
+NPCS[74] = { name = "Argent Envoy", friendlyToFaction = "AH", spawns = { [1497] = { { 1, 1 } }, [1657] = { { 2, 2 } } } }
 QUESTS[20] = { name = "From An Alliance NPC", startedBy = { { 70 } } }
 QUESTS[21] = { name = "From A Horde NPC", startedBy = { { 71 } } }
 QUESTS[22] = { name = "Neutral", startedBy = { { 72 } } }
 QUESTS[23] = { name = "Item Start, Alliance Ender", startedBy = { nil, nil, { 900 } }, finishedBy = { { 70 } } }
 QUESTS[24] = { name = "Either Side", startedBy = { { 70, 71 } } }
 QUESTS[25] = { name = "Smiths Only", requiredSkill = { 164, 100 } }
+QUESTS[26] = { name = "In Search of Thaelrid", startedBy = { { 73 } } }
+QUESTS[27] = { name = "Envoy In Both Capitals", startedBy = { { 74 } } }
 C.source.object = function() return nil end
 C.source.allQuestIds = function() return ids end
 C.source.dungeons = function()
@@ -68,6 +72,8 @@ Check(not C.ForMe(20), "Alliance quest giver: hidden for the Horde")
 Check(C.ForMe(21) and C.ForMe(22) and C.ForMe(24), "Horde, neutral and shared givers: shown")
 Check(not C.ForMe(23), "item start: the Alliance NPC who takes it back hides it")
 Check(C.ForMe(25), "profession quest shown when skills are unknown")
+Check(not C.ForMe(26), "neutral giver in Darnassus: hidden for the Horde")
+Check(C.ForMe(27), "neutral giver also in a Horde city: shown")
 C.player.skills = function() return { mining = true } end
 Check(not C.ForMe(25), "profession quest hidden without that profession")
 C.player.skills = function() return { ["кузнечное дело"] = true } end
