@@ -685,6 +685,95 @@ local function RenderChains(header, chains, highlight)
 	return y
 end
 
+-- The dungeon as a plan: numbered steps, each quest once, and under a
+-- quest you do inside, what it needs there (kill, loot, use).
+UI.PLAN_TITLE = {
+	before = "Before you go in",
+	inside = "In the dungeon",
+	turnin = "After: turn in",
+	later = "Later",
+	done = "Done",
+}
+UI.TARGET_VERB = { kill = "Kill", loot = "Loot", use = "Use", talk = "Talk to" }
+
+local function RenderPlan(header, plan, highlight)
+	local content = UI.rightContent
+	local width = content:GetWidth()
+	for _, r in ipairs(rows) do r:Hide() end
+	for _, h in ipairs(heads) do h:Hide() end
+	local y, ri, hi = 0, 0, 0
+	local TR = ns.Tracker
+
+	local function Heading(text, right, sub)
+		hi = hi + 1
+		local h = Head(hi)
+		h:ClearAllPoints()
+		h:SetPoint("TOPLEFT", 0, -y)
+		h:SetWidth(width)
+		h.text:SetText(text)
+		h.right:SetText(right or "")
+		h.line:SetShown(not sub)
+		h:SetScript("OnClick", nil)
+		if h.lead then h.lead:Hide() end
+		h:Show()
+		y = y + HEAD_H
+		return h
+	end
+
+	if header then
+		local h = Heading(header.title, header.right)
+		h:SetScript("OnClick", header.onClick)
+		if header.sub then
+			local s = Heading("|cff7fd4ff" .. header.sub .. "|r", nil, true)
+			s:SetScript("OnClick", header.onSubClick)
+		end
+		y = y + 6
+	end
+
+	local n = 0
+	for _, section in ipairs(plan) do
+		if not (section.key == "done" and DB().hideDone) then
+			local title = T(UI.PLAN_TITLE[section.key])
+			if section.key ~= "later" and section.key ~= "done" then
+				n = n + 1
+				title = n .. ". " .. title
+			end
+			Heading("|cffe8a33a" .. title .. "|r")
+			for _, item in ipairs(section.items) do
+				ri = ri + 1
+				local r = Row(ri)
+				r:ClearAllPoints()
+				r:SetPoint("TOPLEFT", 8, -y)
+				r:SetWidth(width - 8)
+				PaintRow(r, item.quest, highlight)
+				y = y + ROW_H
+				for _, t in ipairs(item.targets) do
+					ri = ri + 1
+					local tr = Row(ri)
+					tr:ClearAllPoints()
+					tr:SetPoint("TOPLEFT", 30, -y)
+					tr:SetWidth(width - 30)
+					tr.quest = nil
+					local doneT = C.TargetDone(t)
+					tr.icon:SetTexture(doneT and TR.ICON.done or TR.ICON[t.kind] or TR.ICON.kill)
+					if tr.icon.SetDesaturated then tr.icon:SetDesaturated(false) end
+					tr.name:SetText(TR.Label(t))
+					tr.state:SetText("")
+					tr.where:SetText(T(UI.TARGET_VERB[t.kind] or "Loot"))
+					tr.mark:Hide()
+					tr:SetAlpha(doneT and 0.5 or 1)
+					tr:Show()
+					y = y + ROW_H
+				end
+			end
+			y = y + 8
+		end
+	end
+	content:SetHeight(math.max(y, 10))
+	return y
+end
+UI.RenderPlan = RenderPlan
+
 local function DungeonCounts(d)
 	local done, total = 0, 0
 	for _, chain in ipairs(chainsByArea[d.area] or {}) do
@@ -767,9 +856,10 @@ local function RenderDungeons()
 		end
 	end
 	if ns.Tracker then
-		header.targets = C.DungeonTargets(d, chainsByArea[d.area])
+		RenderPlan(header, C.DungeonPlan(d, chainsByArea[d.area]))
+	else
+		RenderChains(header, chainsByArea[d.area])
 	end
-	RenderChains(header, chainsByArea[d.area])
 end
 
 local function RenderLog()

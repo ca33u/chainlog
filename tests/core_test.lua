@@ -210,6 +210,16 @@ log[3] = nil; done[3] = true
 tl, left = TRK.Collect(d, C.DungeonChains(d))
 Check(#tl == 1 and left == 0 and tl[1].done, "quest turned in: the line stays, ticked")
 Check(pcall(TRK.Refresh), "tracker panel renders")
+-- the dungeon as a plan: quest 3 is in the log with the boss inside
+log[3] = true; done[3] = nil
+local plan = C.DungeonPlan(d, C.DungeonChains(d))
+local keys = {}
+for _, sec in ipairs(plan) do keys[#keys + 1] = sec.key end
+local inside
+for _, sec in ipairs(plan) do if sec.key == "inside" then inside = sec end end
+Check(inside and inside.items[1].quest == 3 and #inside.items[1].targets == 1, "plan: the active quest is done inside, with its boss under it")
+Check(keys[#keys] == "done", "plan: finished quests last (" .. table.concat(keys, ",") .. ")")
+Check(pcall(NS.Window.RenderPlan, { title = "Test Hold" }, plan), "plan renders")
 GetInstanceInfo = function() return "Elsewhere", "none" end
 Check(C.CurrentDungeon() == nil, "outside: no dungeon")
 

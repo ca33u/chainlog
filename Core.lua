@@ -945,6 +945,82 @@ function C.TargetProgress(t)
 	return have, need
 end
 
+------------------------------------------------------------------------
+-- Dungeon plan: the quests of a dungeon in the order you do them
+------------------------------------------------------------------------
+
+-- Returns the sections, in order, each { key, items = { {quest, targets} } }:
+--   before  take it (or finish it) outside, before you go in
+--   inside  in the dungeon: what to kill / loot / use for each quest, and
+--           quests that are given or handed in inside
+--   turnin  hand it in outside, after the run
+--   later   needs a level or an earlier step
+--   done    finished
+-- Empty sections are left out. Each quest appears once, in chain order.
+C.PLAN_ORDER = { "before", "inside", "turnin", "later", "done" }
+
+function C.DungeonPlan(d, chains)
+	local targets = C.DungeonTargets(d, chains)
+	local function TargetsOf(id)
+		local out = {}
+		for _, t in ipairs(targets) do
+			local role = t.roles and t.roles[id]
+			if role ~= "take" and role ~= "turnin" then
+				for _, q in ipairs(t.quests) do
+					if q == id then
+						out[#out + 1] = t
+						break
+					end
+				end
+			end
+		end
+		return out
+	end
+	local function Inside(w)
+		return w and (w.inside or (C.index and C.index.byArea[w.area] == d)) and true or false
+	end
+	local buckets, seen = {}, {}
+	for _, key in ipairs(C.PLAN_ORDER) do
+		buckets[key] = {}
+	end
+	for _, chain in ipairs(chains or {}) do
+		for _, id in ipairs(chain) do
+			if not seen[id] then
+				seen[id] = true
+				local st = C.Status(id)
+				local item = { quest = id, targets = {} }
+				local key
+				if st == "done" or st == "skip" then
+					key = "done"
+				elseif st == "level" or st == "locked" then
+					key = "later"
+				elseif st == "available" then
+					key = Inside(C.Giver(id)) and "inside" or "before"
+				elseif st == "active" then
+					item.targets = TargetsOf(id)
+					if #item.targets > 0 or Inside(C.Ender(id)) then
+						key = "inside"
+					else
+						key = "before" -- its objectives are outside: finish them first
+					end
+				elseif st == "ready" then
+					key = Inside(C.Ender(id)) and "inside" or "turnin"
+				else
+					key = "later"
+				end
+				table.insert(buckets[key], item)
+			end
+		end
+	end
+	local out = {}
+	for _, key in ipairs(C.PLAN_ORDER) do
+		if #buckets[key] > 0 then
+			out[#out + 1] = { key = key, items = buckets[key] }
+		end
+	end
+	return out
+end
+
 -- Is this target finished? Uses the quest log's objective lines when the
 -- quest is in progress, so one boss of a two-boss quest can be ticked off.
 function C.TargetDone(t)

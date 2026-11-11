@@ -8,6 +8,15 @@ local L = {}
 ns.L = L
 
 local RU = {
+	["Before you go in"] = "До входа",
+	["In the dungeon"] = "В подземелье",
+	["After: turn in"] = "После: сдать",
+	["Later"] = "Позже",
+	["Done"] = "Сделано",
+	["Kill"] = "Убить",
+	["Loot"] = "Залутать",
+	["Use"] = "Использовать",
+	["Talk to"] = "Поговорить",
 	["On the map: %s"] = "На карте: %s",
 	["Click: show where to turn it in on the map"] = "Клик: показать на карте, где сдать",
 	["Click: show the quest giver on the map"] = "Клик: показать на карте, где взять",
