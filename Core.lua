@@ -7,8 +7,8 @@
 
   A "chain" is every quest connected to a dungeon quest through
   prerequisites (preQuestSingle / preQuestGroup), lead-ins (breadcrumbs) and
-  follow-ups (childQuests / nextQuestInChain), limited to quests your race
-  and class can take. Each chain is listed in the order you do it.
+  follow-ups (childQuests / nextQuestInChain), limited to quests your race,
+  faction (by the quest giver), class and professions allow. Each chain is listed in the order you do it.
 
   All reads are guarded: a missing field or an API change gives empty
   results instead of Lua errors.
@@ -178,6 +178,26 @@ C.player = {
 		local _, _, id = Call(UnitClass, "player")
 		return id
 	end,
+	-- "A" or "H"
+	faction = function()
+		local f = Call(UnitFactionGroup, "player")
+		return (f == "Alliance" and "A") or (f == "Horde" and "H") or nil
+	end,
+	-- names of the skill lines you have (professions), lower case; nil when
+	-- the game does not tell
+	skills = function()
+		if not (GetNumSkillLines and GetSkillLineInfo) then
+			return nil
+		end
+		local out, n = {}, Call(GetNumSkillLines) or 0
+		for i = 1, n do
+			local ok, name, header = pcall(GetSkillLineInfo, i)
+			if ok and type(name) == "string" and not header then
+				out[name:lower()] = true
+			end
+		end
+		return next(out) and out or nil
+	end,
 	done = IsDone,
 	inLog = InLog,
 	complete = IsComplete,
@@ -201,13 +221,91 @@ function C.HasBit(mask, n)
 	return math.floor(mask / 2 ^ (n - 1)) % 2 == 1
 end
 
--- Can this character take the quest at all (race and class)?
+-- Bit number of your race in requiredRaces masks (QuestieDB knows the
+-- encoding; classic races are bit = race ID).
+function C.RaceBit(race)
+	local lib = _G.LibQuestieDB
+	local map = type(lib) == "table" and type(lib.raceMaskById) == "table" and lib.raceMaskById
+	local mask = map and map[race]
+	if type(mask) == "number" and mask > 0 then
+		return math.floor(math.log(mask) / math.log(2) + 0.5) + 1
+	end
+	return race
+end
+
+-- Is the quest giver (or, when an item or object starts it, the one who
+-- takes it back) friendly to your faction? Many quests carry no race mask:
+-- only their NPCs tell Alliance from Horde.
+function C.FactionOK(id)
+	local me = C.player.faction and C.player.faction()
+	if not me then
+		return true
+	end
+	for _, field in ipairs({ "startedBy", "finishedBy" }) do
+		local by = Q(id, field)
+		local npcs = type(by) == "table" and type(by[1]) == "table" and by[1] or {}
+		local known, friend = false, false
+		for _, npc in ipairs(npcs) do
+			local f = C.source.npc(npc, "friendlyToFaction")
+			if type(f) == "string" and f ~= "" then
+				known = true
+				if f:find(me, 1, true) then
+					friend = true
+				end
+			else
+				friend = true -- not known: do not hide the quest for it
+			end
+		end
+		if #npcs > 0 then
+			return friend or not known
+		end
+	end
+	return true
+end
+
+-- Profession skill IDs and their names (English, Russian).
+C.SKILLS = {
+	[129] = { "first aid", "первая помощь" }, [164] = { "blacksmithing", "кузнечное дело" },
+	[165] = { "leatherworking", "кожевничество" }, [171] = { "alchemy", "алхимия" },
+	[182] = { "herbalism", "травничество" }, [185] = { "cooking", "кулинария" },
+	[186] = { "mining", "горное дело" }, [197] = { "tailoring", "портняжное дело" },
+	[202] = { "engineering", "инженерное дело" }, [333] = { "enchanting", "наложение чар" },
+	[356] = { "fishing", "рыбная ловля" }, [393] = { "skinning", "снятие шкур" },
+}
+
+-- Profession quests only for those who have that profession.
+function C.SkillOK(id)
+	local need = Q(id, "requiredSkill")
+	local skill = type(need) == "table" and need[1]
+	local names = skill and C.SKILLS[skill]
+	if not names then
+		return true
+	end
+	local mine = C.player.skills and C.player.skills()
+	if not mine then
+		return true -- the game does not tell: show it
+	end
+	for _, n in ipairs(names) do
+		if mine[n] then
+			return true
+		end
+	end
+	return false
+end
+
+-- Can this character take the quest at all (race, faction, class,
+-- profession)?
 function C.ForMe(id)
 	if Q(id, "name") == nil then
 		return false
 	end
-	return C.HasBit(Q(id, "requiredRaces"), C.player.race())
+	if C.player.inLog(id) or C.player.done(id) then
+		return true -- you have it, whatever the data says
+	end
+	return C.HasBit(Q(id, "requiredRaces"), C.RaceBit(C.player.race()))
 		and C.HasBit(Q(id, "requiredClasses"), C.player.class())
+		and C.FactionOK(id)
+		and C.SkillOK(id)
 end
 
 local function List(v)

@@ -6,7 +6,7 @@ A dungeon quest checklist for **World of Warcraft: Forever** (Interface 16001). 
 
 ## Features
 
-- **Every dungeon with quests** for your faction, race and class: level ranges and how many quests you've already done ("3/7"). By default it shows dungeons around your level; the "Show all levels" checkbox shows all of them, raids included.
+- **Every dungeon with quests** for your faction, race, class and professions (Alliance-only quest givers are hidden for the Horde and the other way round; profession quests only if you have that profession): level ranges and how many quests you've already done ("3/7"). By default it shows dungeons around your level; the "Show all levels" checkbox shows all of them, raids included.
 - **Whole chains**: a dungeon quest together with all its prerequisites (earlier steps, optional lead-ins) and follow-ups, in the order you do them.
 - **Where to get it**: for each quest, who gives it, the zone and coordinates; if the quest starts from an item, what the item is and what drops it.
 - **Map waypoint**: click a quest to set a waypoint to the quest giver (or to the turn-in, if you already have the quest). With TomTom you get the TomTom arrow, without it a regular in-game map pin. Click the "Entrance" row to set a waypoint to the dungeon entrance.

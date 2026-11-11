@@ -34,6 +34,16 @@ for id in pairs(QUESTS) do ids[#ids + 1] = id end
 table.sort(ids)
 local function G(t) return function(id, key) local r = t[id]; return r and r[key] end end
 C.source.quest, C.source.npc, C.source.item = G(QUESTS), G(NPCS), G(ITEMS)
+-- not in the index: only for C.ForMe
+NPCS[70] = { name = "Stormwind Guard", friendlyToFaction = "A" }
+NPCS[71] = { name = "Orgrimmar Grunt", friendlyToFaction = "H" }
+NPCS[72] = { name = "Goblin", friendlyToFaction = "AH" }
+QUESTS[20] = { name = "From An Alliance NPC", startedBy = { { 70 } } }
+QUESTS[21] = { name = "From A Horde NPC", startedBy = { { 71 } } }
+QUESTS[22] = { name = "Neutral", startedBy = { { 72 } } }
+QUESTS[23] = { name = "Item Start, Alliance Ender", startedBy = { nil, nil, { 900 } }, finishedBy = { { 70 } } }
+QUESTS[24] = { name = "Either Side", startedBy = { { 70, 71 } } }
+QUESTS[25] = { name = "Smiths Only", requiredSkill = { 164, 100 } }
 C.source.object = function() return nil end
 C.source.allQuestIds = function() return ids end
 C.source.dungeons = function()
@@ -53,6 +63,16 @@ Check(C.HasBit(178, 5), "undead bit set in Horde mask")
 Check(not C.HasBit(77, 5), "undead bit not in Alliance mask")
 Check(C.HasBit(8589934770, 5), "wide masks work")
 Check(C.HasBit(nil, 5) and C.HasBit(0, 5), "no mask: anyone")
+C.player.faction = function() return "H" end
+Check(not C.ForMe(20), "Alliance quest giver: hidden for the Horde")
+Check(C.ForMe(21) and C.ForMe(22) and C.ForMe(24), "Horde, neutral and shared givers: shown")
+Check(not C.ForMe(23), "item start: the Alliance NPC who takes it back hides it")
+Check(C.ForMe(25), "profession quest shown when skills are unknown")
+C.player.skills = function() return { mining = true } end
+Check(not C.ForMe(25), "profession quest hidden without that profession")
+C.player.skills = function() return { ["кузнечное дело"] = true } end
+Check(C.ForMe(25), "profession quest shown with it (Russian client)")
+C.player.skills = nil
 
 local idx = C.Build()
 Check(#idx.dungeons == 1 and idx.dungeons[1].name == "Test Hold", "one dungeon; battleground skipped")
