@@ -8,6 +8,7 @@ local L = {}
 ns.L = L
 
 local RU = {
+	["quest mob icons:"] = "значки квестовых мобов:",
 	["Before you go in"] = "До входа",
 	["In the dungeon"] = "В подземелье",
 	["After: turn in"] = "После: сдать",

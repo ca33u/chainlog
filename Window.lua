@@ -1028,6 +1028,8 @@ SlashCmdList.CHAINLOG = function(msg)
 		print(P .. T("abandon warning:") .. " " .. (DB().warn and T("on") or T("off")))
 	elseif cmd == "tracker" then
 		if ns.Tracker then ns.Tracker.Toggle() end
+	elseif cmd == "marks" then
+		if ns.Marks then ns.Marks.Toggle() end
 	elseif cmd == "stop" then
 		if ns.Guide then ns.Guide.Stop() end
 	elseif cmd == "next" then
@@ -1047,6 +1049,7 @@ SlashCmdList.CHAINLOG = function(msg)
 		print("  /chainlog next     " .. T("Lead me through this chain"))
 		print("  /chainlog stop     " .. T("Stop leading"))
 		print("  /chainlog tracker  " .. T("dungeon checklist:"))
+		print("  /chainlog marks  " .. T("quest mob icons:"))
 		print("  /chainlog warn     " .. T("abandon warning:"))
 		print("  /chainlog minimap  " .. T("minimap button:"))
 	else

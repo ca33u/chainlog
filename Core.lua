@@ -849,6 +849,13 @@ function C.DungeonTargets(d, chains)
 								Add("item:" .. e[1], "loot", iname, nil, id, 4)
 								local t = byKey["item:" .. e[1]]
 								t.many = #droppers
+								t.npcs = t.npcs or {}
+								for _, x in ipairs(droppers) do
+									local n = tonumber(x[1]:match(":(%d+)$"))
+									if n then
+										t.npcs[n] = true
+									end
+								end
 							else
 								for _, x in ipairs(droppers) do
 									Add(x[1], "loot", x[2], iname, id, x[3])
@@ -1016,6 +1023,38 @@ function C.DungeonPlan(d, chains)
 	for _, key in ipairs(C.PLAN_ORDER) do
 		if #buckets[key] > 0 then
 			out[#out + 1] = { key = key, items = buckets[key] }
+		end
+	end
+	return out
+end
+
+-- NPC IDs (mobs) a target is about: the mob to kill, the mobs that drop
+-- the item. Objects and people to talk to are not mobs.
+function C.TargetNpcs(t)
+	local out = {}
+	if t.kind == "kill" then
+		local n = tonumber(t.key:match("^kill:(%d+)$"))
+		if n then out[n] = true end
+	elseif t.kind == "loot" then
+		local n = tonumber(t.key:match("^loot:%d+:(%d+)$"))
+		if n then out[n] = true end
+		for npc in pairs(t.npcs or {}) do
+			out[npc] = true
+		end
+	end
+	return out
+end
+
+-- Mobs you still need in this dungeon: npcID -> "kill" | "loot".
+function C.NeededMobs(d, chains)
+	local out = {}
+	for _, t in ipairs(C.DungeonTargets(d, chains)) do
+		if not C.TargetDone(t) then
+			for npc in pairs(C.TargetNpcs(t)) do
+				if out[npc] ~= "kill" then
+					out[npc] = t.kind
+				end
+			end
 		end
 	end
 	return out

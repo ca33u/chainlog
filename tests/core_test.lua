@@ -220,6 +220,29 @@ for _, sec in ipairs(plan) do if sec.key == "inside" then inside = sec end end
 Check(inside and inside.items[1].quest == 3 and #inside.items[1].targets == 1, "plan: the active quest is done inside, with its boss under it")
 Check(keys[#keys] == "done", "plan: finished quests last (" .. table.concat(keys, ",") .. ")")
 Check(pcall(NS.Window.RenderPlan, { title = "Test Hold" }, plan), "plan renders")
+-- quest mobs marked on nameplates, your line in tooltips
+LoadFile("Marks.lua")
+local MK = NS.Marks
+Check(MK.NpcID("Creature-0-3767-0-37-4421-000ABC") == 4421 and MK.NpcID("Player-1-0ABC") == nil, "npc ID from a GUID")
+log[3] = true; done[3] = nil
+objs[1].finished = false
+GetInstanceInfo = function() return "Test Hold", "party", 1, "", 5, 0, false, 9999 end
+MK.Rebuild()
+local any = next(MK.needed)
+Check(any ~= nil and MK.needed[any] == "kill", "in the dungeon: the boss you still need is marked")
+objs[1].finished = true
+MK.Rebuild()
+Check(next(MK.needed) == nil, "objective done: no mark")
+UnitName = function() return "Saz" end
+local lines = { "Kraul Bat", "Going, Going, Guano!", "  Saz: Kraul Guano 2/6", "  Tank: Kraul Guano 5/6" }
+local fonts = {}
+for i, t in ipairs(lines) do
+	fonts[i] = { GetText = function() return lines[i] end, SetText = function(_, v) lines[i] = v end }
+	_G["TipTestTextLeft" .. i] = fonts[i]
+end
+local tip = { GetName = function() return "TipTest" end, NumLines = function() return #lines end }
+Check(MK.HighlightTooltip(tip) == 1 and lines[3]:find("» ", 1, true) and not lines[4]:find("»", 1, true), "your line in the tooltip is marked, others not")
+Check(MK.HighlightTooltip(tip) == 0, "marked only once")
 GetInstanceInfo = function() return "Elsewhere", "none" end
 Check(C.CurrentDungeon() == nil, "outside: no dungeon")
 
