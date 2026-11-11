@@ -12,7 +12,7 @@ local T = ns.T
 local M = {}
 ns.Minimap = M
 
-local ICON = "Interface\\AddOns\\Chainlog\\Media\\icon"
+local ICON = "Interface\\AddOns\\Chainlog\\Media\\minimap"
 
 local function IsSecret(v)
 	return issecretvalue and issecretvalue(v) and true or false
