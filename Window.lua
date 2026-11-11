@@ -557,6 +557,7 @@ local function RenderChains(header, chains, highlight)
 	end
 
 	-- inside the dungeon: what your quests need there
+	local function DrawTargets()
 	local targets = header and header.targets
 	if targets and #targets > 0 then
 		hi = hi + 1
@@ -592,8 +593,9 @@ local function RenderChains(header, chains, highlight)
 		end
 		y = y + 8
 	end
+	end
 
-	for n, chain in ipairs(chains) do
+	local function DrawChain(chain)
 		local list = {}
 		local doneCount = 0
 		for _, id in ipairs(chain) do
@@ -632,6 +634,52 @@ local function RenderChains(header, chains, highlight)
 			end
 			y = y + 8
 		end
+	end
+
+	-- Order: chains with something still to do first (to take, in progress,
+	-- ready), then what your quests need inside the dungeon, then chains you
+	-- have finished.
+	local open, finished = {}, {}
+	for _, chain in ipairs(chains) do
+		local all = true
+		for _, id in ipairs(chain) do
+			local st = C.Status(id)
+			if st ~= "done" and st ~= "skip" then
+				all = false
+				break
+			end
+		end
+		if all then
+			finished[#finished + 1] = chain
+		else
+			open[#open + 1] = chain
+		end
+	end
+	-- among the open ones: something to turn in or do first, then quests to
+	-- take, then ones that wait for a level or an earlier step
+	local RANK = { ready = 1, active = 2, available = 3, level = 4, locked = 5 }
+	local function Best(chain)
+		local best = 9
+		for _, id in ipairs(chain) do
+			best = math.min(best, RANK[C.Status(id)] or 9)
+		end
+		return best
+	end
+	for i, chain in ipairs(open) do
+		open[i] = { chain = chain, best = Best(chain), i = i }
+	end
+	table.sort(open, function(a, b)
+		if a.best ~= b.best then
+			return a.best < b.best
+		end
+		return a.i < b.i
+	end)
+	for _, e in ipairs(open) do
+		DrawChain(e.chain)
+	end
+	DrawTargets()
+	for _, chain in ipairs(finished) do
+		DrawChain(chain)
 	end
 	content:SetHeight(math.max(y, 10))
 	return y
