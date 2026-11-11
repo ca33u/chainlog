@@ -3,7 +3,7 @@
 ## Notes: Dungeon quest checklist: every dungeon's quests, their prep chains, where to pick them up, and a warning before you abandon a chain quest.
 ## Notes-ruRU: Чеклист квестов подземелий: все квесты данжей, цепочки подготовки, где их брать, и предупреждение перед отказом от квеста из цепочки.
 ## Author: addicted
-## Version: 1.3.0
+## Version: 1.3.1
 ## X-License: MIT
 ## X-Website: https://addicted.sh
 ## IconTexture: Interface\AddOns\Chainlog\Media\icon
