@@ -897,6 +897,54 @@ function C.DungeonTargets(d, chains)
 	return list
 end
 
+-- The quest log objective line of quest `q` that is about target `t`
+-- ("Arcane Mote: 3/10"), or nil.
+local function LogObjective(q, t)
+	local P = C.player
+	local objs = P.objectives and P.objectives(q)
+	if type(objs) ~= "table" then
+		return nil
+	end
+	local want = (t.item or t.name or ""):lower()
+	if want == "" then
+		return nil
+	end
+	for _, o in ipairs(objs) do
+		local text = type(o) == "table" and type(o.text) == "string" and o.text:lower() or ""
+		if text:find(want, 1, true) then
+			return o
+		end
+	end
+	return nil
+end
+
+-- How many of a target you have and need, summed over its quests in
+-- progress (from the quest log). Returns have, need or nil when unknown.
+function C.TargetProgress(t)
+	if t.kind == "talk" then
+		return nil
+	end
+	local have, need = 0, 0
+	for _, q in ipairs(t.quests) do
+		local st = C.Status(q)
+		if st == "active" or st == "ready" then
+			local o = LogObjective(q, t)
+			local n = o and tonumber(o.numRequired)
+			if n and n > 0 then
+				local f = tonumber(o.numFulfilled) or 0
+				if st == "ready" or o.finished == true then
+					f = n
+				end
+				have, need = have + math.min(f, n), need + n
+			end
+		end
+	end
+	if need == 0 then
+		return nil
+	end
+	return have, need
+end
+
 -- Is this target finished? Uses the quest log's objective lines when the
 -- quest is in progress, so one boss of a two-boss quest can be ticked off.
 function C.TargetDone(t)
@@ -913,19 +961,8 @@ function C.TargetDone(t)
 				all = false
 			end
 		elseif st == "active" then
-			local objs = P.objectives and P.objectives(q)
-			local matched, finished = false, false
-			if type(objs) == "table" then
-				local want = (t.item or t.name or ""):lower()
-				for _, o in ipairs(objs) do
-					local text = type(o) == "table" and type(o.text) == "string" and o.text:lower() or ""
-					if want ~= "" and text:find(want, 1, true) then
-						matched, finished = true, o.finished == true
-						break
-					end
-				end
-			end
-			if not (matched and finished) then
+			local o = LogObjective(q, t)
+			if not (o and o.finished == true) then
 				all = false
 			end
 		elseif st ~= "done" and st ~= "ready" then

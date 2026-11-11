@@ -47,6 +47,11 @@ function TR.Label(t)
 	if t.item and t.item ~= name then
 		name = name .. ": |cffffffff" .. t.item .. "|r"
 	end
+	local have, need = C.TargetProgress(t)
+	if need and need > 1 then
+		local col = have >= need and "|cff20ff20" or "|cffffd100"
+		name = name .. "  " .. col .. have .. "/" .. need .. "|r"
+	end
 	if t.many then
 		name = name .. " |cffaaaaaa(" .. T("from mobs in the dungeon") .. ")|r"
 	end

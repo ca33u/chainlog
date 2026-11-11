@@ -192,6 +192,12 @@ d = C.index.dungeons[1] -- the window rebuilt the index above
 local tg = C.DungeonTargets(d, C.DungeonChains(d))
 Check(#tg == 1 and tg[1].kind == "kill" and tg[1].name == "Boss", "inside: kill the boss for the active quest")
 Check(not C.TargetDone(tg[1]), "boss not done yet")
+Check(C.TargetProgress(tg[1]) == nil, "no counts in the log line: no progress shown")
+objs[1].numFulfilled, objs[1].numRequired = 3, 10
+local hv, nd = C.TargetProgress(tg[1])
+Check(hv == 3 and nd == 10, "progress read from the quest log")
+Check(TRK.Label(tg[1]):find("3/10", 1, true), "tracker line shows 3/10")
+objs[1].numFulfilled, objs[1].numRequired = nil, nil
 objs[1].finished = true
 Check(C.TargetDone(tg[1]), "boss ticked off from the quest log line")
 GetInstanceInfo = function() return "Test Hold", "party", 1, "", 5, 0, false, 9999 end
