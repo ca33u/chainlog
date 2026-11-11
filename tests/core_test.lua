@@ -98,6 +98,7 @@ Check(C.Waypoint(g, "y") and math.abs(got[2] - 0.44) < 1e-9, "waypoint to the gi
 
 -- abandon warning
 LoadFile("Util.lua")
+LoadFile("MapPin.lua")
 LoadFile("Window.lua")
 LoadFile("Abandon.lua")
 local lines = NS.Abandon.Lines(2)
@@ -217,4 +218,13 @@ QUESTS[10] = { name = "After", questLevel = 21, preQuestSingle = { 9 }, startedB
 log[9] = true
 local st = Gd.NextStep({ 9, 10 })
 Check(st.action == "turnin" and st.where and st.where.name == "Elder", "no objective spots: head for the turn-in")
+-- show on the map
+local opened
+OpenWorldMap = function(m) opened = m end
+WorldMapFrame = StubObj({ GetMapID = function() return opened end, GetCanvas = function() return StubObj({ GetWidth = function() return 1000 end, GetHeight = function() return 660 end }) end })
+WorldMapFrame._shown = true
+C.source.uiMap = function(area) return area == 12 and 1429 or nil end
+Check(NS.MapPin.Show({ area = 12, x = 40, y = 60 }, "Elder", "take") and opened == 1429, "click: world map opens on the zone")
+Check(NS.MapPin.target and NS.MapPin.target.x == 40 and NS.MapPin.target.kind == "take", "pin placed at the spot")
+Check(NS.MapPin.Show({ area = 999, x = 1, y = 1 }, "?", "take") == false, "unknown zone: no map")
 Report("core_test")

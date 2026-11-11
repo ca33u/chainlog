@@ -1034,12 +1034,13 @@ end
 -- Sets a map waypoint (TomTom when installed, the game's own pin otherwise).
 -- `arrow`: also point TomTom's arrow at it (quietly). Returns ok and a
 -- handle for C.RemoveWaypoint.
-function C.Waypoint(w, title, arrow)
+-- The world map and point (0..100) for a place; inside a dungeon its
+-- entrance. Returns map, x, y or nil.
+function C.MapPoint(w)
 	if not (w and w.area and type(w.x) == "number" and type(w.y) == "number") then
-		return false
+		return nil
 	end
 	local area = w.area
-	-- inside a dungeon: point at its entrance instead
 	local d = C.index and C.index.byArea[area]
 	local x, y = w.x, w.y
 	if d and d.entrances[1] then
@@ -1047,6 +1048,14 @@ function C.Waypoint(w, title, arrow)
 		area, x, y = e[1], e[2], e[3]
 	end
 	local map = C.source.uiMap(area)
+	if not map then
+		return nil
+	end
+	return map, x, y
+end
+
+function C.Waypoint(w, title, arrow)
+	local map, x, y = C.MapPoint(w)
 	if not map then
 		return false
 	end

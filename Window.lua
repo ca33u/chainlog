@@ -267,7 +267,7 @@ local function Build()
 	end
 	UI.legend = win:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
 	UI.legend:SetPoint("BOTTOMRIGHT", -PAD, 18)
-	UI.legend:SetText(T("Click: waypoint to the quest giver"))
+	UI.legend:SetText(T("Click: show on the map  ·  Shift-click: quest log"))
 
 	win:SetScript("OnShow", function()
 		UI.EnsureIndex()
@@ -401,7 +401,10 @@ local function ShowTip(row)
 	end
 	GameTooltip:AddLine(" ")
 	local st = C.Status(id)
-	GameTooltip:AddLine((st == "active" or st == "ready") and T("Click: waypoint to where you turn it in") or T("Click: waypoint to the quest giver"), 0.5, 0.5, 0.5)
+	GameTooltip:AddLine((st == "active" or st == "ready") and T("Click: show where to turn it in on the map") or T("Click: show the quest giver on the map"), 0.5, 0.5, 0.5)
+	if st == "active" or st == "ready" then
+		GameTooltip:AddLine(T("Shift-click: open in your quest log"), 0.5, 0.5, 0.5)
+	end
 	GameTooltip:Show()
 end
 
@@ -443,9 +446,16 @@ local function Row(i)
 				return
 			end
 			local st = C.Status(self.quest)
-			local w = (st == "active" or st == "ready") and C.Ender(self.quest) or C.Giver(self.quest)
-			if C.Waypoint(w, C.Name(self.quest)) then
-				print("|cffe8a33aChainlog|r " .. string.format(T("Waypoint set: %s"), C.FormatWhere(w) or ""))
+			local mine = st == "active" or st == "ready"
+			-- Shift-click: the quest in your quest log
+			if IsShiftKeyDown and IsShiftKeyDown() and mine and ns.MapPin.OpenQuest(self.quest) then
+				return
+			end
+			local w = mine and C.Ender(self.quest) or C.Giver(self.quest)
+			local name = C.Name(self.quest)
+			C.Waypoint(w, name)
+			if ns.MapPin.Show(w, name, mine and "turnin" or "take") then
+				print("|cffe8a33aChainlog|r " .. string.format(T("On the map: %s"), C.FormatWhere(w) or ""))
 			else
 				print("|cffe8a33aChainlog|r " .. (w and (C.FormatWhere(w) or "") or T("No location known for this quest")))
 			end
@@ -784,7 +794,7 @@ function UI.Refresh()
 	if G and G.chain then
 		UI.legend:SetText("|TInterface\\Minimap\\MiniMap-QuestArrow:12|t |cffffd100" .. G.Describe(G.step) .. "|r")
 	else
-		UI.legend:SetText(T("Click: waypoint to the quest giver"))
+		UI.legend:SetText(T("Click: show on the map  ·  Shift-click: quest log"))
 	end
 	if not C.source.available() then
 		for _, b in ipairs(leftButtons) do b:Hide() end

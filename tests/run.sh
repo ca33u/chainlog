@@ -1,6 +1,6 @@
 #!/bin/zsh
 # Syntax check and every test suite. Run from anywhere.
-set -e
+set -e -o pipefail
 cd "$(dirname "$0")/.."
 echo "== syntax (luac -p)"
 for f in *.lua tests/*.lua; do luac -p "$f"; done

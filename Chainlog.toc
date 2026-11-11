@@ -17,6 +17,7 @@
 Locale.lua
 Core.lua
 Util.lua
+MapPin.lua
 Window.lua
 Guide.lua
 Tracker.lua

@@ -8,6 +8,11 @@ local L = {}
 ns.L = L
 
 local RU = {
+	["On the map: %s"] = "На карте: %s",
+	["Click: show where to turn it in on the map"] = "Клик: показать на карте, где сдать",
+	["Click: show the quest giver on the map"] = "Клик: показать на карте, где взять",
+	["Shift-click: open in your quest log"] = "Shift+клик: открыть в журнале заданий",
+	["Click: show on the map  ·  Shift-click: quest log"] = "Клик: показать на карте  ·  Shift+клик: журнал",
 	["Dungeons"] = "Подземелья",
 	["My quests"] = "Мои квесты",
 	["Hide completed"] = "Скрыть выполненные",
