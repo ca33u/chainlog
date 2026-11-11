@@ -1,39 +1,41 @@
+English · [Русский](README.ru.md)
+
 # Chainlog
 
-Чеклист квестов подземелий для **World of Warcraft: Forever** (Interface 16001). Студия **addicted** — [addicted.sh](https://addicted.sh), лицензия MIT.
+A dungeon quest checklist for **World of Warcraft: Forever** (Interface 16001). Made by **addicted** ([addicted.sh](https://addicted.sh)), MIT license.
 
-## Что умеет
+## Features
 
-- **Все подземелья с квестами** для вашей фракции, расы и класса: уровни и сколько квестов уже сделано («3/7»). По умолчанию показаны подземелья вокруг вашего уровня, галочка «Все уровни» показывает все, включая рейды.
-- **Цепочки целиком**: квест подземелья вместе со всей подготовкой (предыдущие шаги, необязательные подводки) и продолжениями, по порядку выполнения.
-- **Где брать**: у каждого квеста — кто выдаёт, зона и координаты; если квест начинается с предмета — что за предмет и с кого падает.
-- **Метка на карте**: клик по квесту ставит метку к квестодателю (или к месту сдачи, если квест уже взят). С TomTom — стрелка TomTom, без него — обычная метка игры. Клик по строке «Вход» — метка ко входу в подземелье.
-- **Статусы**: ✓ выполнен · ? в журнале (жёлтый — можно сдавать) · ! можно взять (серый — нужен уровень выше) · замок — сначала прошлый шаг.
-- **Ведение по цепочке**: кнопка «Вести» у любой цепочки — и стрелка TomTom (без TomTom — метка игры на карте) сама идёт по шагам: к квестодателю → к ближайшему месту, где делается задание (нужный моб, с кого падает предмет, объект, область) → к месту сдачи → к следующему квесту. Цепочка запоминается между заходами в игру. Цели внутри подземелья ведут ко входу в него.
-- **Внутри подземелья**: у каждого данжа блок «Внутри» — каких боссов и мобов убить, что добыть и с кого, с кем поговорить по вашим квестам. Когда заходите в подземелье, появляется маленький чеклист с этими целями; они отмечаются по мере выполнения (по строкам журнала квестов). Стрелки внутри нет: игра не даёт аддонам координаты в подземельях.
-- **Вкладка «Мои квесты»**: квесты из журнала, которые входят в цепочку, с номером шага и всей цепочкой вокруг.
-- **Предупреждение при отказе**: если вы бросаете квест из цепочки или квест подземелья, рядом появляется панель — какой это шаг, какие шаги закроются и где взять квест заново.
+- **Every dungeon with quests** for your faction, race and class: level ranges and how many quests you've already done ("3/7"). By default it shows dungeons around your level; the "Show all levels" checkbox shows all of them, raids included.
+- **Whole chains**: a dungeon quest together with all its prerequisites (earlier steps, optional lead-ins) and follow-ups, in the order you do them.
+- **Where to get it**: for each quest, who gives it, the zone and coordinates; if the quest starts from an item, what the item is and what drops it.
+- **Map waypoint**: click a quest to set a waypoint to the quest giver (or to the turn-in, if you already have the quest). With TomTom you get the TomTom arrow, without it a regular in-game map pin. Click the "Entrance" row to set a waypoint to the dungeon entrance.
+- **Statuses**: ✓ done · ? in your quest log (yellow: ready to turn in) · ! available (grey: needs a higher level) · lock: finish the previous step first.
+- **Chain guidance**: press "Lead" on any chain and the TomTom arrow (without TomTom, the game's map pin) walks you through the steps by itself: to the quest giver → to the nearest place where the objective is done (the mob you need, what drops the item, the object, the area) → to the turn-in → to the next quest. The chain is remembered between sessions. Objectives inside a dungeon lead to its entrance.
+- **Inside the dungeon**: each dungeon has an "Inside" section: which bosses and mobs to kill, what to loot and from whom, who to talk to for your quests. When you enter the dungeon, a small checklist with these objectives appears; they get checked off as you complete them (based on your quest log lines). There's no arrow inside: the game doesn't give addons coordinates in dungeons.
+- **"My quests" tab**: quests from your quest log that are part of a chain, with the step number and the whole chain around them.
+- **Abandon warning**: if you abandon a chain quest or a dungeon quest, a panel pops up next to it: which step it is, which steps will be locked, and where to pick the quest up again.
 
-## Откуда данные
+## Where the data comes from
 
-Chainlog не везёт свою базу квестов: он читает её во время игры из **QuestieDB** (собрана под Forever) через её публичный API. QuestieDB должна быть установлена и включена. Questie для работы не нужен.
+Chainlog doesn't ship its own quest database: it reads it in game from **QuestieDB** (built for Forever) through its public API. QuestieDB must be installed and enabled. Questie itself is not required.
 
-## Команды
+## Commands
 
-| Команда | Что делает |
+| Command | What it does |
 |---|---|
-| `/chainlog` (или `/chains`) | открыть / закрыть окно |
-| `/chainlog log` | сразу вкладка «Мои квесты» |
-| `/chainlog next` | напомнить следующий шаг ведомой цепочки |
-| `/chainlog stop` | перестать вести |
-| `/chainlog tracker` | чеклист в подземелье вкл/выкл |
-| `/chainlog warn` | предупреждение при отказе от квеста вкл/выкл |
-| `/chainlog minimap` | кнопка у миникарты вкл/выкл |
+| `/chainlog` (or `/chains`) | open / close the window |
+| `/chainlog log` | go straight to the "My quests" tab |
+| `/chainlog next` | show the next step of the chain being led |
+| `/chainlog stop` | stop leading |
+| `/chainlog tracker` | dungeon checklist on/off |
+| `/chainlog warn` | abandon warning on/off |
+| `/chainlog minimap` | minimap button on/off |
 
-Кнопка у миникарты: левый клик — окно, правый — «Мои квесты», перетаскивание — сдвинуть.
+Minimap button: left-click opens the window, right-click opens "My quests", drag to move it.
 
-## Установка
+## Installation
 
-Папку `Chainlog` положить в `World of Warcraft/_forever_/Interface/AddOns`, рядом должна быть `QuestieDB`.
+Put the `Chainlog` folder into `World of Warcraft/_forever_/Interface/AddOns`; `QuestieDB` must be there next to it.
 
-© 2026 addicted · [addicted.sh](https://addicted.sh). Лицензия MIT, см. `LICENSE`.
+© 2026 addicted · [addicted.sh](https://addicted.sh). MIT license, see `LICENSE`.
