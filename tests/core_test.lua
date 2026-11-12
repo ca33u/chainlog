@@ -166,6 +166,19 @@ Check(#spots == 2 and spots[1].name:find("Wolf Pelt", 1, true) ~= nil, "item obj
 local near = C.ObjectiveSpot(2, { map = 21, x = 75, y = 75 })
 Check(near and near.x == 80, "nearest spot on your map")
 Check(C.ObjectiveSpot(2, { map = 99 }).area == 130, "elsewhere: the zone with the spots")
+-- where a quest row points: objectives while in the log, then the turn-in
+do
+	local saveLog, saveC, saveD = C.player.inLog, C.player.complete, C.player.done
+	C.player.done = function() return false end
+	C.player.inLog = function(id) return id == 2 end
+	C.player.complete = function() return false end
+	local w, kind = C.NextPlace(2, { map = 21, x = 75, y = 75 })
+	Check(kind == "do" and w.x == 80, "in log, not done: go to the objectives")
+	C.player.complete = function(id) return id == 2 end
+	local e, kind2 = C.NextPlace(2)
+	Check(kind2 == "turnin" and e and e.name == "Elder", "objectives done: go turn it in")
+	C.player.inLog, C.player.complete, C.player.done = saveLog, saveC, saveD
+end
 
 -- guide: follow the chain 1 -> 2 -> 3
 LoadFile("Guide.lua")

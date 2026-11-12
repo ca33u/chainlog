@@ -17,6 +17,7 @@ ns.MapPin = MP
 MP.ICON = {
 	take = "Interface\\GossipFrame\\AvailableQuestIcon",
 	turnin = "Interface\\GossipFrame\\ActiveQuestIcon",
+	["do"] = "Interface\\TargetingFrame\\UI-TargetingFrame-Skull",
 }
 
 MP.target = nil -- { map, x, y, title, kind }
@@ -121,7 +122,7 @@ local function Hook()
 end
 
 -- Opens the world map on the place `w` with the pin.
--- kind: "take" or "turnin". Returns true when the map could be opened.
+-- kind: "take", "do" or "turnin". Returns true when the map could be opened.
 function MP.Show(w, title, kind)
 	local map, x, y = C.MapPoint(w)
 	if not map then

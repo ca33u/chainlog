@@ -377,6 +377,14 @@ local function ShowTip(row)
 		GameTooltip:AddLine(" ")
 		GameTooltip:AddLine(T("Quest giver") .. ": " .. g, 0.8, 0.8, 0.8, true)
 	end
+	local st = C.Status(id)
+	local place, kind = C.NextPlace(id)
+	if kind == "do" then
+		local d = C.FormatWhere(place)
+		if d then
+			GameTooltip:AddLine(T("Go to") .. ": " .. d, 1, 0.82, 0, true)
+		end
+	end
 	local e = C.FormatWhere(C.Ender(id))
 	if e then
 		GameTooltip:AddLine(T("Turn in") .. ": " .. e, 0.8, 0.8, 0.8, true)
@@ -400,8 +408,7 @@ local function ShowTip(row)
 		GameTooltip:AddLine(T("Leads to") .. ": " .. table.concat(nexts, ", "), 0.5, 0.83, 1, true)
 	end
 	GameTooltip:AddLine(" ")
-	local st = C.Status(id)
-	GameTooltip:AddLine((st == "active" or st == "ready") and T("Click: show where to turn it in on the map") or T("Click: show the quest giver on the map"), 0.5, 0.5, 0.5)
+	GameTooltip:AddLine(T(kind == "do" and "Click: show where to do it on the map" or kind == "turnin" and "Click: show where to turn it in on the map" or "Click: show the quest giver on the map"), 0.5, 0.5, 0.5)
 	if st == "active" or st == "ready" then
 		GameTooltip:AddLine(T("Shift-click: open in your quest log"), 0.5, 0.5, 0.5)
 	end
@@ -451,10 +458,10 @@ local function Row(i)
 			if IsShiftKeyDown and IsShiftKeyDown() and mine and ns.MapPin.OpenQuest(self.quest) then
 				return
 			end
-			local w = mine and C.Ender(self.quest) or C.Giver(self.quest)
+			local w, kind = C.NextPlace(self.quest)
 			local name = C.Name(self.quest)
 			C.Waypoint(w, name)
-			if ns.MapPin.Show(w, name, mine and "turnin" or "take") then
+			if ns.MapPin.Show(w, name, kind) then
 				print("|cffe8a33aChainlog|r " .. string.format(T("On the map: %s"), C.FormatWhere(w) or ""))
 			else
 				print("|cffe8a33aChainlog|r " .. (w and (C.FormatWhere(w) or "") or T("No location known for this quest")))
@@ -504,8 +511,9 @@ local function PaintRow(r, id, highlight)
 	end
 	local w
 	if st == "active" or st == "ready" then
-		local e = C.FormatWhere(C.Ender(id))
-		w = e and (T("Turn in") .. ": " .. e) or ""
+		local place, kind = C.NextPlace(id)
+		local e = C.FormatWhere(place)
+		w = e and (T(kind == "do" and "Go to" or "Turn in") .. ": " .. e) or ""
 	elseif st == "done" then
 		w = ""
 	else

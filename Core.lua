@@ -887,6 +887,29 @@ function C.ObjectiveSpot(id, here)
 	return best
 end
 
+-- Where to go next for a quest: the objectives while it is in your log and
+-- not finished, the turn-in when it is ready (or has nothing to hunt), the
+-- quest giver otherwise. Returns where, kind ("do" | "turnin" | "take").
+function C.NextPlace(id, here)
+	local st = C.Status(id)
+	if st == "active" then
+		local spot = C.ObjectiveSpot(id, here)
+		if spot then
+			local w = { kind = "spot", name = spot.name or C.Name(id), area = spot.area, x = spot.x, y = spot.y }
+			if spot.inside then
+				w.inside = true
+				local d = C.index and C.index.byArea[spot.area]
+				w.dungeon = d and d.name or nil
+			end
+			return w, "do"
+		end
+		return C.Ender(id), "turnin"
+	elseif st == "ready" then
+		return C.Ender(id), "turnin"
+	end
+	return C.Giver(id), "take"
+end
+
 ------------------------------------------------------------------------
 -- Targets inside a dungeon: who to kill, what to loot, whom to talk to
 ------------------------------------------------------------------------
