@@ -221,6 +221,22 @@ Check(Gd.chain == nil and ChainlogDB.guide == nil, "chain finished: guide stops"
 Check(Gd.Describe(nil) == "Chain finished!", "finished text")
 Gd.Start(3)
 Check(Gd.chain == nil or Gd.step == nil, "an already finished chain stops at once")
+-- tracking one quest: one at a time, again turns it off
+do
+	local sd, sl = done, log
+	done, log = {}, { [2] = true }
+	Gd.Track(2)
+	Check(Gd.IsTracked(2) and #Gd.chain == 1 and ChainlogDB.guideSingle, "track: only this quest is followed")
+	Gd.Track(3)
+	Check(Gd.IsTracked(3) and not Gd.IsTracked(2), "tracking another quest replaces it")
+	Gd.Track(3)
+	Check(not Gd.IsTracked(3) and Gd.chain == nil and ChainlogDB.guide == nil, "tracking it again turns it off")
+	Gd.Track(2)
+	Gd.Start(3)
+	Check(not Gd.IsTracked(2) and not ChainlogDB.guideSingle, "leading a chain replaces the tracked quest")
+	Gd.Stop(true)
+	done, log = sd, sl
+end
 -- dungeon targets and the tracker
 LoadFile("Tracker.lua")
 local TRK = NS.Tracker

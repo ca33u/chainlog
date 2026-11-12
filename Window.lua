@@ -408,9 +408,11 @@ local function ShowTip(row)
 		GameTooltip:AddLine(T("Leads to") .. ": " .. table.concat(nexts, ", "), 0.5, 0.83, 1, true)
 	end
 	GameTooltip:AddLine(" ")
-	GameTooltip:AddLine(T(kind == "do" and "Click: show where to do it on the map" or kind == "turnin" and "Click: show where to turn it in on the map" or "Click: show the quest giver on the map"), 0.5, 0.5, 0.5)
 	if st == "active" or st == "ready" then
-		GameTooltip:AddLine(T("Shift-click: open in your quest log"), 0.5, 0.5, 0.5)
+		GameTooltip:AddLine(T("Click: open in your quest log"), 0.5, 0.5, 0.5)
+		GameTooltip:AddLine(T(kind == "do" and "Shift-click: show where to do it on the map" or "Shift-click: show where to turn it in on the map"), 0.5, 0.5, 0.5)
+	else
+		GameTooltip:AddLine(T("Click: show the quest giver on the map"), 0.5, 0.5, 0.5)
 	end
 	GameTooltip:Show()
 end
@@ -428,11 +430,38 @@ local function Row(i)
 		r.icon:SetPoint("TOPLEFT", 2, -2)
 		r.name = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 		r.name:SetPoint("TOPLEFT", 24, -3)
-		r.name:SetPoint("RIGHT", -90, 0)
+		r.name:SetPoint("RIGHT", -112, 0)
 		r.name:SetJustifyH("LEFT")
 		r.name:SetWordWrap(false)
+		-- track: show this quest in the navigation (one at a time)
+		r.track = CreateFrame("Button", nil, r)
+		r.track:SetSize(18, 18)
+		r.track:SetPoint("TOPRIGHT", -2, -1)
+		r.track.tex = r.track:CreateTexture(nil, "ARTWORK")
+		r.track.tex:SetAllPoints()
+		r.track.tex:SetTexture("Interface\\Minimap\\MiniMap-QuestArrow")
+		r.track:RegisterForClicks("LeftButtonUp")
+		r.track:SetScript("OnClick", function(self)
+			local q = self:GetParent().quest
+			if q and ns.Guide then
+				ns.Guide.Track(q)
+			end
+		end)
+		r.track:SetScript("OnEnter", function(self)
+			local q = self:GetParent().quest
+			if GameTooltip and q then
+				local on = ns.Guide and ns.Guide.IsTracked(q)
+				GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+				GameTooltip:AddLine(on and T("Stop tracking") or T("Track in navigation"), 1, 0.82, 0)
+				GameTooltip:AddLine(T("The arrow and the map pin follow this quest: giver, objectives, turn-in. One quest at a time."), 0.9, 0.9, 0.9, true)
+				GameTooltip:Show()
+			end
+		end)
+		r.track:SetScript("OnLeave", function()
+			if GameTooltip then GameTooltip:Hide() end
+		end)
 		r.state = r:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-		r.state:SetPoint("TOPRIGHT", -2, -4)
+		r.state:SetPoint("TOPRIGHT", -24, -4)
 		r.state:SetJustifyH("RIGHT")
 		r.where = r:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
 		r.where:SetPoint("TOPLEFT", 24, -18)
@@ -454,13 +483,13 @@ local function Row(i)
 			end
 			local st = C.Status(self.quest)
 			local mine = st == "active" or st == "ready"
-			-- Shift-click: the quest in your quest log
-			if IsShiftKeyDown and IsShiftKeyDown() and mine and ns.MapPin.OpenQuest(self.quest) then
+			-- in your log: open it there (Shift-click: where to go, on the map)
+			local shift = IsShiftKeyDown and IsShiftKeyDown()
+			if mine and not shift and ns.MapPin.OpenQuest(self.quest) then
 				return
 			end
 			local w, kind = C.NextPlace(self.quest)
 			local name = C.Name(self.quest)
-			C.Waypoint(w, name)
 			if ns.MapPin.Show(w, name, kind) then
 				print("|cffe8a33aChainlog|r " .. string.format(T("On the map: %s"), C.FormatWhere(w) or ""))
 			else
@@ -469,6 +498,7 @@ local function Row(i)
 		end)
 		rows[i] = r
 	end
+	r.track:Hide()
 	return r
 end
 
@@ -521,6 +551,10 @@ local function PaintRow(r, id, highlight)
 		w = g and (T("Quest giver") .. ": " .. g) or ""
 	end
 	r.where:SetText(w)
+	local on = ns.Guide and ns.Guide.IsTracked(id)
+	r.track.tex:SetDesaturated(not on)
+	r.track.tex:SetAlpha(on and 1 or 0.35)
+	r.track:SetShown(on or (st ~= "done" and st ~= "skip"))
 	r.mark:SetShown(highlight == id)
 	r:SetAlpha((st == "done" or st == "skip") and 0.7 or 1)
 	r:Show()

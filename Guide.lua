@@ -1,7 +1,8 @@
 --[[
   Chainlog guide: follow one chain with TomTom's arrow.
 
-  Pick a chain with its "Lead" button. Chainlog then keeps one waypoint on
+  Pick a chain with its "Lead" button, or one quest with the track arrow
+  on its row (one thing at a time). Chainlog then keeps one waypoint on
   the next thing to do and moves it by itself as you play:
 
     quest you can take      -> its quest giver
@@ -134,7 +135,7 @@ function G.Update(announce)
 	G.lastKey = key
 	G.step = step
 	if not step then
-		print(P .. T("Chain finished!"))
+		print(P .. (G.single and string.format(T("%s: done, tracking off."), C.Name(G.root)) or T("Chain finished!")))
 		G.Stop(true)
 		return nil
 	end
@@ -160,16 +161,37 @@ function G.Start(id)
 	local chain = C.ChainOf(id)
 	G.chain = chain
 	G.root = chain[#chain]
+	G.single = false
 	DB().guide = G.root
+	DB().guideSingle = nil
 	G.lastKey = nil
 	print(P .. string.format(T("Leading: %s"), C.Name(G.root)))
 	return G.Update(true)
 end
 
+-- Track one quest: the navigation follows it alone (giver, objectives,
+-- turn-in). Only one thing is tracked at a time: tracking another quest
+-- (or leading a chain) replaces it; tracking it again turns it off.
+function G.Track(id)
+	if G.IsTracked(id) then
+		G.Stop()
+		return nil
+	end
+	G.chain, G.root, G.single = { id }, id, true
+	DB().guide, DB().guideSingle = id, true
+	G.lastKey = nil
+	print(P .. string.format(T("Tracking: %s"), C.Name(id)))
+	return G.Update(true)
+end
+
+function G.IsTracked(id)
+	return G.single and G.root == id or false
+end
+
 function G.Stop(quiet)
 	Clear()
-	G.chain, G.root, G.step = nil, nil, nil
-	DB().guide = nil
+	G.chain, G.root, G.step, G.single = nil, nil, nil, false
+	DB().guide, DB().guideSingle = nil, nil
 	if not quiet then
 		print(P .. T("Stopped leading."))
 	end
@@ -220,7 +242,8 @@ ev:SetScript("OnEvent", function(_, event)
 		if type(root) == "number" and C_Timer and C_Timer.After then
 			C_Timer.After(8, function()
 				if C.source.available() then
-					G.chain = C.ChainOf(root)
+					G.single = DB().guideSingle and true or false
+					G.chain = G.single and { root } or C.ChainOf(root)
 					G.root = root
 					G.Update(true)
 				end
