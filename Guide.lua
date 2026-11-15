@@ -106,18 +106,46 @@ local function Clear()
 	G.handle, G.lastKey = nil, nil
 end
 
-local function KeyOf(step)
+local function KeyOf(step, leg)
 	if not step then
 		return "done"
 	end
 	local w = step.where
-	return string.format("%s:%s:%s:%s:%s", step.action, step.quest, w and w.area or "", w and w.x or "", w and w.y or "")
+	local key = string.format("%s:%s:%s:%s:%s", step.action, step.quest, w and w.area or "", w and w.x or "", w and w.y or "")
+	if leg then
+		key = key .. string.format(":%s:%s", leg.mode, ns.Route.PlaceName(leg.to))
+	end
+	return key
+end
+
+-- The fastest way there (flights, zeppelins, boats) when it beats running
+-- straight. Returns the route and the leg to show now, or nil.
+local function RouteFor(step)
+	if not (step and step.where and step.action ~= "level" and ns.Route) then
+		return nil
+	end
+	local ok, route = pcall(ns.Route.To, step.where)
+	if not ok or not route or #route.legs < 2 then
+		return nil
+	end
+	local leg, i = ns.Route.Current(route)
+	if not leg or i == #route.legs then
+		return nil -- only the last run is left: the plain arrow does it
+	end
+	return route, leg, i
+end
+
+local function OnTaxi()
+	return UnitOnTaxi and UnitOnTaxi("player") and true or false
 end
 
 -- Recompute the next step and move the waypoint if it changed.
 function G.Update(announce)
 	if not G.chain then
 		return
+	end
+	if OnTaxi() and G.step then
+		return G.step -- in the air: replan after landing
 	end
 	local step = G.NextStep(G.chain)
 	-- keep the objective spot steady while you work on the same quest here
@@ -126,7 +154,8 @@ function G.Update(announce)
 		step.where = G.step.where
 	end
 	G.zoneChanged = false
-	local key = KeyOf(step)
+	local route, leg, legIndex = RouteFor(step)
+	local key = KeyOf(step, leg)
 	if key == G.lastKey and not announce then
 		return step
 	end
@@ -134,6 +163,7 @@ function G.Update(announce)
 	Clear()
 	G.lastKey = key
 	G.step = step
+	G.route = route
 	if not step then
 		print(P .. (G.single and string.format(T("%s: done, tracking off."), C.Name(G.root)) or T("Chain finished!")))
 		G.Stop(true)
@@ -141,7 +171,24 @@ function G.Update(announce)
 	end
 	local text = G.Describe(step)
 	local where = step.where and C.FormatWhere(step.where)
-	if step.where and step.action ~= "level" then
+	if leg then
+		-- the arrow goes to the flight master or the dock first
+		local map, x, y = ns.Route.MapOf(leg)
+		local say = ns.Route.Say(leg, false)
+		if leg.mode == "fly" then
+			-- standing at the master: the arrow points at where you land
+			say = say .. " (" .. T("talk to the flight master") .. ")"
+		elseif leg.mode ~= "run" then
+			say = say .. " (" .. T("wait for it at the dock") .. ")"
+		end
+		local ok, handle = false, nil
+		if map then
+			ok, handle = C.WaypointAt(map, x, y, ns.Route.Title(route, legIndex, say, text), true)
+		end
+		if ok then
+			G.handle = handle
+		end
+	elseif step.where and step.action ~= "level" then
 		local ok, handle = C.Waypoint(step.where, text, true)
 		if ok then
 			G.handle = handle
@@ -149,6 +196,16 @@ function G.Update(announce)
 	end
 	if changed or announce then
 		print(P .. "|cffffd100>|r " .. text .. (where and step.action ~= "do" and ("  |cffaaaaaa" .. where .. "|r") or ""))
+		-- far away on foot because no flight point here is known yet: say so once
+		local cont = not leg and step.where and ns.Route and ns.Route.MissingFlights and ns.Route.MissingFlights(step.where)
+		G.hinted = G.hinted or {}
+		if cont and not G.hinted[cont] then
+			G.hinted[cont] = true
+			print(P .. "|cffffd100" .. T("Chainlog does not know your flight points on this continent yet: open any flight master's map here once, and the route will use them.") .. "|r")
+		end
+		if leg then
+			print(P .. "|cffffd100" .. T("Fastest way:") .. "|r " .. table.concat(ns.Route.Lines(route) or {}, "  "))
+		end
 	end
 	if ns.Window and ns.Window.Refresh then
 		ns.Window.Refresh()
@@ -182,6 +239,13 @@ function G.Track(id)
 	G.lastKey = nil
 	print(P .. string.format(T("Tracking: %s"), C.Name(id)))
 	return G.Update(true)
+end
+
+-- Position changed a lot (landed, crossed a zone): check the route again.
+function G.Replan()
+	if G.chain then
+		G.Update(false)
+	end
 end
 
 function G.IsTracked(id)
@@ -251,6 +315,10 @@ ev:SetScript("OnEvent", function(_, event)
 		end
 		return
 	end
+	if event == "PLAYER_CONTROL_GAINED" or event == "TAXIMAP_CLOSED" then
+		Queue(1) -- landed, or left the flight master
+		return
+	end
 	if event == "ZONE_CHANGED_NEW_AREA" then
 		G.zoneChanged = true
 		Queue(2) -- objectives: pick the spot nearest on the new map
@@ -259,6 +327,20 @@ ev:SetScript("OnEvent", function(_, event)
 	end
 end)
 ev:RegisterEvent("PLAYER_LOGIN")
-for _, e in ipairs({ "QUEST_ACCEPTED", "QUEST_TURNED_IN", "QUEST_REMOVED", "QUEST_LOG_UPDATE", "PLAYER_LEVEL_UP", "ZONE_CHANGED_NEW_AREA" }) do
+for _, e in ipairs({ "QUEST_ACCEPTED", "QUEST_TURNED_IN", "QUEST_REMOVED", "QUEST_LOG_UPDATE", "PLAYER_LEVEL_UP", "ZONE_CHANGED_NEW_AREA", "PLAYER_CONTROL_GAINED", "TAXIMAP_CLOSED" }) do
 	pcall(ev.RegisterEvent, ev, e)
 end
+
+-- While a route with a flight or a ship is up, check every few seconds
+-- whether you reached the flight master or the dock.
+local tick = 0
+ev:SetScript("OnUpdate", function(_, elapsed)
+	tick = tick + (elapsed or 0)
+	if tick < 3 then
+		return
+	end
+	tick = 0
+	if G.chain and G.route then
+		G.Update(false)
+	end
+end)

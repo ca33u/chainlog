@@ -52,6 +52,9 @@ function TR.Label(t)
 		local col = have >= need and "|cff20ff20" or "|cffffd100"
 		name = name .. "  " .. col .. have .. "/" .. need .. "|r"
 	end
+	if t.hint then
+		name = name .. " |cffaaaaaa(" .. T(t.hint) .. ")|r"
+	end
 	if t.many then
 		name = name .. " |cffaaaaaa(" .. T("from mobs in the dungeon") .. ")|r"
 	end

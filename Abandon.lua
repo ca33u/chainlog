@@ -135,9 +135,30 @@ function A.Hide()
 	end
 end
 
+-- Drops quests from the log (after the player confirmed). Returns how many.
+function A.Drop(ids)
+	local QL = C_QuestLog
+	if not (QL and QL.SetSelectedQuest and QL.SetAbandonQuest and QL.AbandonQuest) then
+		return 0
+	end
+	local n = 0
+	for _, id in ipairs(ids) do
+		A.silent = true
+		local ok = pcall(QL.SetSelectedQuest, id) and pcall(QL.SetAbandonQuest) and pcall(QL.AbandonQuest)
+		A.silent = false
+		if ok then
+			n = n + 1
+		end
+	end
+	return n
+end
+
 -- Post-hook: runs after the game stored which quest is being abandoned.
 if C_QuestLog and type(C_QuestLog.SetAbandonQuest) == "function" and hooksecurefunc then
 	hooksecurefunc(C_QuestLog, "SetAbandonQuest", function()
+		if A.silent then
+			return -- Chainlog itself is dropping a quest it found safe to drop
+		end
 		local id = C_QuestLog.GetAbandonQuest and select(2, pcall(C_QuestLog.GetAbandonQuest))
 		if type(id) == "number" and not (issecretvalue and issecretvalue(id)) then
 			A.Show(id)

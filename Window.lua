@@ -3,8 +3,14 @@
 
     Dungeons tab   every dungeon with quests for your race and class,
                    level range and how many of its quests you have done.
-    My quests tab  the quests in your log that belong to a chain, with the
+    My quests tab  quests ready to turn in at the top (any quest in your
+                   log), then the quests that belong to a chain, with the
                    whole chain around them.
+                   "Can drop" lists the quests you can abandon without losing
+                   anything: failed ones, grey ones with nothing worth doing
+                   after them, and quests of a dungeon you have outgrown.
+                   Never one ready to turn in. Drop one (click the reason)
+                   or all at once, after a confirmation.
 
   Each quest row: status icon, [level] name, and on the second line where
   to pick it up (or turn it in). Click a row to put a waypoint there
@@ -227,6 +233,13 @@ local function Build()
 	end
 	UI.hideDone = Check("hideDone", T("Hide completed"), -PAD)
 	UI.allLevels = Check("allLevels", T("Show all levels"), -PAD - 150)
+	UI.dropOnly = Check("dropOnly", T("Can drop"), -PAD - 150)
+	UI.dropAll = CreateFrame("Button", nil, win, "UIPanelButtonTemplate")
+	UI.dropAll:SetSize(130, 22)
+	UI.dropAll:SetPoint("TOPRIGHT", -PAD - 262, -30)
+	UI.dropAll:SetScript("OnClick", function()
+		UI.ConfirmDrop(UI.dropList or {})
+	end)
 
 	-- left list
 	UI.left = CreateFrame("ScrollFrame", "ChainlogLeftScroll", win, "UIPanelScrollFrameTemplate")
@@ -388,6 +401,20 @@ local function ShowTip(row)
 	local e = C.FormatWhere(C.Ender(id))
 	if e then
 		GameTooltip:AddLine(T("Turn in") .. ": " .. e, 0.8, 0.8, 0.8, true)
+	end
+	-- the fastest way to the next place, when a flight or a ship helps
+	if place and ns.Route and st ~= "done" then
+		local ok, route = pcall(ns.Route.To, place)
+		local lines = ok and ns.Route.Lines(route)
+		if lines then
+			GameTooltip:AddLine(" ")
+			GameTooltip:AddLine(T("Fastest way:"), 0.5, 0.83, 1)
+			for _, line in ipairs(lines) do
+				GameTooltip:AddLine(line, 0.85, 0.85, 0.85, true)
+			end
+		elseif ok and route and ns.Route.KnownCount() == 0 then
+			GameTooltip:AddLine(T("Open any flight master's map once: Chainlog learns your flight points for routes."), 0.5, 0.5, 0.5, true)
+		end
 	end
 	local p = C.Prereqs(id)
 	local need = {}
@@ -904,18 +931,116 @@ local function RenderDungeons()
 	end
 end
 
+-- Asks, then drops the given quests ({ {id, reason} }).
+function UI.ConfirmDrop(list)
+	if #list == 0 or not StaticPopupDialogs then
+		return
+	end
+	local ids, names = {}, {}
+	for i, q in ipairs(list) do
+		ids[#ids + 1] = q.id
+		if i <= 5 then
+			names[#names + 1] = C.Name(q.id)
+		end
+	end
+	local text = #ids == 1 and string.format(T("Drop %s from your quest log?"), names[1])
+		or string.format(T("Drop %d quests from your quest log? %s"), #ids, table.concat(names, ", ") .. (#ids > 5 and ", ..." or ""))
+	StaticPopupDialogs.CHAINLOG_DROP = {
+		text = text,
+		button1 = YES or "Yes",
+		button2 = NO or "No",
+		OnAccept = function()
+			local n = ns.Abandon and ns.Abandon.Drop(ids) or 0
+			print("|cffe8a33aChainlog|r " .. string.format(T("dropped %d quests."), n))
+			if C_Timer and C_Timer.After then
+				C_Timer.After(0.5, UI.Refresh)
+			end
+		end,
+		timeout = 0,
+		whileDead = true,
+		hideOnEscape = true,
+		preferredIndex = 3,
+	}
+	StaticPopup_Show("CHAINLOG_DROP")
+end
+
+-- My quests with "Can drop": quests nothing depends on anymore.
+local function RenderDroppable()
+	local list = C.Droppable()
+	UI.dropList = list
+	UI.dropAll:SetText(string.format(T("Drop all (%d)"), #list))
+	UI.dropAll:SetShown(#list > 0)
+	local found = false
+	for _, q in ipairs(list) do
+		if q.id == UI.selected then
+			found = true
+		end
+	end
+	if not found then
+		UI.selected = list[1] and list[1].id or nil
+	end
+	for _, b in ipairs(leftButtons) do b:Hide() end
+	local reasonOf = {}
+	for i, q in ipairs(list) do
+		reasonOf[q.id] = q.reason
+		local b = LeftButton(i)
+		b:ClearAllPoints()
+		b:SetPoint("TOPLEFT", 0, -(i - 1) * 23)
+		local r, g, bl = LevelColor(C.Level(q.id))
+		b.name:SetText(Hex(r, g, bl) .. C.Name(q.id) .. "|r")
+		b.info:SetText(T(C.DROP_TAG[q.reason] or ""))
+		if b.sep then
+			b.sep:Hide()
+		end
+		b.hl:SetShown(UI.selected == q.id)
+		b:SetScript("OnClick", function()
+			UI.selected = q.id
+			UI.right:SetVerticalScroll(0)
+			UI.Refresh()
+		end)
+		b:Show()
+	end
+	UI.leftContent:SetHeight(math.max(#list * 23, 10))
+	if not UI.selected then
+		RenderChains(nil, {})
+		UI.message:SetText(T("Nothing to drop: every quest in your log is still worth doing."))
+		return
+	end
+	UI.message:SetText("")
+	local id = UI.selected
+	local chain = C.ChainOf(id)
+	local why = T(C.DROP_TEXT[reasonOf[id]] or "")
+	UI.forceChainHead = true
+	RenderChains({
+		title = C.Name(id),
+		right = "",
+		sub = why .. "  ·  " .. T("click to drop it"),
+		onSubClick = function()
+			UI.ConfirmDrop({ { id = id } })
+		end,
+	}, { chain }, id)
+	UI.forceChainHead = false
+end
+
 local function RenderLog()
+	if DB().dropOnly then
+		return RenderDroppable()
+	end
+	UI.dropAll:Hide()
 	local items = {}
+	local ready = 0
 	for _, id in ipairs(C.LogQuests()) do
 		local chain, pos = C.ChainOf(id)
 		local d = C.DungeonOf(id)
-		if #chain > 1 or d then
-			items[#items + 1] = { id = id, chain = chain, pos = pos, dungeon = d }
+		local isReady = C.Status(id) == "ready"
+		if #chain > 1 or d or isReady then
+			items[#items + 1] = { id = id, chain = chain, pos = pos, dungeon = d, ready = isReady, level = C.Level(id) }
+			if isReady then
+				ready = ready + 1
+			end
 		end
 	end
-	table.sort(items, function(a, b)
-		return (C.Level(a.id) or 0) < (C.Level(b.id) or 0)
-	end)
+	C.LogOrder(items)
 	local found = false
 	for _, it in ipairs(items) do
 		if it.id == UI.selected then
@@ -931,8 +1056,21 @@ local function RenderLog()
 		b:ClearAllPoints()
 		b:SetPoint("TOPLEFT", 0, -(i - 1) * 23)
 		local r, g, bl = LevelColor(C.Level(it.id))
-		b.name:SetText(Hex(r, g, bl) .. C.Name(it.id) .. "|r")
-		b.info:SetText(#it.chain > 1 and string.format(T("step %d/%d"), it.pos, #it.chain) or (it.dungeon and it.dungeon.name:sub(1, 10) or ""))
+		if it.ready then
+			b.name:SetText("|T" .. ICON.ready .. ":13|t " .. Hex(r, g, bl) .. C.Name(it.id) .. "|r")
+			b.info:SetText("|cffffd100" .. T("Turn in") .. "|r")
+		else
+			b.name:SetText(Hex(r, g, bl) .. C.Name(it.id) .. "|r")
+			b.info:SetText(#it.chain > 1 and string.format(T("step %d/%d"), it.pos, #it.chain) or (it.dungeon and it.dungeon.name:sub(1, 10) or ""))
+		end
+		-- a thin gold line under the last quest ready to turn in
+		b.sep = b.sep or b:CreateTexture(nil, "ARTWORK")
+		b.sep:ClearAllPoints()
+		b.sep:SetPoint("BOTTOMLEFT", 0, -1)
+		b.sep:SetPoint("BOTTOMRIGHT", 0, -1)
+		b.sep:SetHeight(1)
+		b.sep:SetColorTexture(1, 0.82, 0, 0.35)
+		b.sep:SetShown(it.ready and i == ready and ready < #items)
 		b.hl:SetShown(UI.selected == it.id)
 		b:SetScript("OnClick", function()
 			UI.selected = it.id
@@ -963,6 +1101,11 @@ function UI.Refresh()
 	UI.hideDone:SetChecked(db.hideDone)
 	UI.allLevels:SetChecked(db.allLevels)
 	UI.allLevels:SetShown(db.tab == "dungeons")
+	UI.dropOnly:SetChecked(db.dropOnly and true or false)
+	UI.dropOnly:SetShown(db.tab == "log")
+	if db.tab ~= "log" then
+		UI.dropAll:Hide()
+	end
 	for key, b in pairs(UI.tabs) do
 		if key == db.tab then
 			b:LockHighlight()

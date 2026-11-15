@@ -6,7 +6,7 @@
 ## Version: 1.4.0
 ## X-License: MIT
 ## X-Website: https://addicted.sh
-## IconTexture: Interface\AddOns\Chainlog\Media\icon
+## IconTexture: Interface\AddOns\Chainlog\Media\icon.blp
 ## Category: Quests
 ## Dependencies: QuestieDB
 ## OptionalDeps: TomTom
@@ -19,6 +19,8 @@ Core.lua
 Util.lua
 MapPin.lua
 Window.lua
+Flights.lua
+Route.lua
 Guide.lua
 Tracker.lua
 Marks.lua

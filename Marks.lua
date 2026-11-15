@@ -7,9 +7,11 @@
      away when that objective is done. Enemy nameplates must be on (V).
      The game's nameplates are never changed: the icon is our own frame.
 
-  2. You in quest tooltips. When a mob's tooltip lists the quest progress
-     of everyone in your group, your own line is shown in gold with an
-     arrow, so you find it at a glance.
+  2. Quest lines in mob tooltips. When a mob's tooltip lists the quest
+     progress of everyone in your group, your own line is shown in gold
+     with an arrow, so you find it at a glance. A finished objective
+     (2/2) turns green, and so does the quest's title when all its
+     objectives there are finished.
 
   Items lying on the ground (crates, chests) cannot be marked: the game
   gives addons neither their position nor a frame for them.
@@ -131,24 +133,78 @@ end
 ------------------------------------------------------------------------
 
 MK.MARK = "|cffffd100» "
+MK.DONE = "|cff40ff40"
 
--- Gold and an arrow on the tooltip lines that are about you (a line with
--- your name and a count like 3/6), not on the first line (the mob's name).
+local function Plain(text)
+	return (text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""))
+end
+
+-- Is this an objective line that is finished (2/2, 10/10)?
+function MK.Finished(plain)
+	local a, b = plain:match("(%d+)/(%d+)")
+	a, b = tonumber(a), tonumber(b)
+	return a and b and b > 0 and a >= b or false
+end
+
+-- Quest lines in a mob's tooltip (written by Questie and the like), from
+-- the second line on:
+--   your own progress line (in a group): gold with an arrow
+--   a finished objective (2/2): green
+--   a quest title ([33] Name) whose objectives below are all finished: green
+-- Returns how many lines changed; lines already changed are left alone.
 function MK.HighlightTooltip(tip)
 	local me = Safe(UnitName, "player")
-	if type(me) ~= "string" or not (tip and tip.NumLines) then
+	if not (tip and tip.NumLines) then
 		return 0
 	end
 	local name = tip.GetName and tip:GetName()
 	local n, changed = Safe(tip.NumLines, tip) or 0, 0
+	local fonts, texts = {}, {}
 	for i = 2, n do
 		local fs = name and _G[name .. "TextLeft" .. i]
 		local text = fs and Safe(fs.GetText, fs)
-		if type(text) == "string" and text:find(me, 1, true) and not text:find(MK.MARK, 1, true) then
-			local plain = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
-			if plain:find("%d+/%d+") or plain:find(me .. ":", 1, true) then
-				fs:SetText(MK.MARK .. plain .. "|r")
+		if type(text) == "string" then
+			fonts[i], texts[i] = fs, text
+		end
+	end
+	-- objectives first
+	for i = 2, n do
+		local text = texts[i]
+		if text and not text:find(MK.MARK, 1, true) and text:sub(1, #MK.DONE) ~= MK.DONE then
+			local plain = Plain(text)
+			local done = plain:find("%d+/%d+") and MK.Finished(plain)
+			local mine = type(me) == "string" and text:find(me, 1, true)
+				and (plain:find("%d+/%d+") or plain:find(me .. ":", 1, true))
+			if mine then
+				fonts[i]:SetText((done and (MK.DONE .. "» ") or MK.MARK) .. plain .. "|r")
 				changed = changed + 1
+			elseif done then
+				fonts[i]:SetText(MK.DONE .. plain .. "|r")
+				changed = changed + 1
+			end
+		end
+	end
+	-- then quest titles: green when every objective under them is finished
+	for i = 2, n do
+		local text = texts[i]
+		if text and text:sub(1, #MK.DONE) ~= MK.DONE then
+			local plain = Plain(text)
+			if plain:find("^%s*%[%d+%+?%]") then
+				local objectives, finished = 0, 0
+				for j = i + 1, n do
+					local p = texts[j] and Plain(texts[j])
+					if not p or p:find("^%s*%[%d+%+?%]") or not p:find("%d+/%d+") then
+						break
+					end
+					objectives = objectives + 1
+					if MK.Finished(p) then
+						finished = finished + 1
+					end
+				end
+				if objectives > 0 and finished == objectives then
+					fonts[i]:SetText(MK.DONE .. plain .. "|r")
+					changed = changed + 1
+				end
 			end
 		end
 	end

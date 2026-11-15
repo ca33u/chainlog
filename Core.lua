@@ -139,8 +139,59 @@ C.source = {
 	end,
 }
 
+-- Gaps in QuestieDB_Forever for Forever's new content, filled in until the
+-- data catches up. A field is used only when QuestieDB has nothing for it.
+-- The Drowned City (Horde chain, Kin'weelay in Grom'gol): The Vile Reef ->
+-- The Gurubashi Legends of Old -> Locating the Lost City -> The Drowned City;
+-- Enemies in the Water -> The Only Good Brinescale...
+C.QUEST_FIX = {
+	[629] = { nextQuestInChain = 95748 },
+	[95748] = { startedBy = { { 2519 } }, preQuestSingle = { 629 }, nextQuestInChain = 95770 },
+	[95770] = { preQuestSingle = { 95748 }, nextQuestInChain = 95775 },
+	[95775] = { preQuestSingle = { 95770 } },
+	[95773] = { nextQuestInChain = 95776 },
+	[95776] = { preQuestSingle = { 95773 } },
+	-- not in QuestieDB at all yet
+	[95789] = { name = "Shady Saltseers", questLevel = 40, requiredLevel = 34 },
+	[95791] = { name = "The Saltseer Captain", questLevel = 40, requiredLevel = 34 },
+	[95787] = { name = "Take Two With Water", questLevel = 40, requiredLevel = 30, requiredRaces = 4294967373 },
+	[95788] = { name = "Magics of the Drowned City", questLevel = 40, requiredLevel = 30, requiredRaces = 4294967373 },
+	[97130] = { name = "Ancient Gurubashi Secrets", questLevel = 40, requiredLevel = 34, requiredRaces = 4294967373 },
+}
+
+-- Dungeons missing from QuestieDB's ZoneDB. `area` is a made-up negative
+-- key (the real one isn't known); inside, the dungeon is found by name.
+C.EXTRA_DUNGEONS = {
+	{ area = -1, name = "The Drowned City", parent = 33, entrances = { { 33, 21.4, 27.9 } },
+		min = 35, max = 40, quests = { 95775, 95776, 96774, 95789, 95791, 95787, 95788, 97130 },
+		-- QuestieDB has no drop or objective data for these: the checklist
+		-- inside the dungeon, written by hand (kind, name, item, hint)
+		targets = {
+			{ 95775, "use", "The First Tablet of I'lalai", nil, "past Zul'Alai" },
+			{ 95775, "use", "The Second Tablet of I'lalai", nil, "by Var'Taka, naga side" },
+			{ 95775, "use", "The Third Tablet of I'lalai", nil, "by Captain Dreadrise, pirate side" },
+			{ 95775, "use", "The Fourth Tablet of I'lalai", nil, "at the back, by Min'loth" },
+			{ 95787, "use", "The First Tablet of I'lalai", nil, "past Zul'Alai" },
+			{ 95787, "use", "The Second Tablet of I'lalai", nil, "by Var'Taka, naga side" },
+			{ 95787, "use", "The Third Tablet of I'lalai", nil, "by Captain Dreadrise, pirate side" },
+			{ 95787, "use", "The Fourth Tablet of I'lalai", nil, "at the back, by Min'loth" },
+			{ 95776, "kill", "Var'Taka" },
+			{ 95791, "kill", "Captain Dreadrise" },
+			{ 95791, "kill", "Saltseer Coroner" },
+			{ 95789, "loot", "Saltseer Coroner, Saltseer Manhunter", "Voodoo-Infused Artifact" },
+			{ 95788, "loot", "Risen Sentry, Profane Necromancer", "I'lalai Fetish" },
+			{ 96774, "loot", "Deathless Marrow", "Ancient Gurubashi Idol" },
+			{ 97130, "loot", "Deathless Marrow", "Ancient Gurubashi Idol" },
+		} },
+}
+
 local function Q(id, key)
-	return C.source.quest(id, key)
+	local v = C.source.quest(id, key)
+	if v == nil then
+		local fix = C.QUEST_FIX[id]
+		v = fix and fix[key]
+	end
+	return v
 end
 
 ------------------------------------------------------------------------
@@ -197,6 +248,17 @@ C.player = {
 			end
 		end
 		return next(out) and out or nil
+	end,
+	-- levels above a quest's at which it turns grey (little experience)
+	greyRange = function()
+		local r = Call(UnitQuestTrivialLevelRange, "player")
+		if type(r) ~= "number" then
+			r = Call(GetQuestGreenRange)
+		end
+		return type(r) == "number" and r or nil
+	end,
+	failed = function(id)
+		return C_QuestLog and Call(C_QuestLog.IsFailed, id) == true or false
 	end,
 	done = IsDone,
 	inLog = InLog,
@@ -385,6 +447,23 @@ function C.Build(yield, step)
 			for _, alt in ipairs(List(d[2])) do
 				byArea[alt] = byArea[alt] or entry
 			end
+		end
+	end
+	local named = {}
+	for _, d in ipairs(dungeons) do
+		named[d.name] = true
+	end
+	for _, x in ipairs(C.EXTRA_DUNGEONS) do
+		if not named[x.name] and not byArea[x.area] then
+			local entry = { area = x.area, name = x.name, parent = x.parent, entrances = x.entrances,
+				min = x.min, max = x.max, raid = false, quests = {}, targets = x.targets }
+			for _, id in ipairs(x.quests) do
+				if Q(id, "name") then -- only quests the data knows
+					entry.quests[#entry.quests + 1] = id
+				end
+			end
+			dungeons[#dungeons + 1] = entry
+			byArea[x.area] = entry
 		end
 	end
 	local ids = C.source.allQuestIds() or {}
@@ -1040,6 +1119,17 @@ function C.DungeonTargets(d, chains)
 			end
 		end
 	end
+	-- hand-written checklist (dungeons QuestieDB knows too little about)
+	local ORDER = { talk = 1, kill = 2, loot = 2, use = 3 }
+	for _, x in ipairs(d.targets or {}) do
+		local id, kind, name, iname, hint = x[1], x[2], x[3], x[4], x[5]
+		local st = C.Status(id)
+		if st == "active" or st == "ready" then
+			local key = kind .. ":" .. name .. ":" .. (iname or "")
+			Add(key, kind, name, iname, id, ORDER[kind] or 4)
+			byKey[key].hint = byKey[key].hint or hint
+		end
+	end
 	for _, t in ipairs(list) do
 		if t.name == "?" and t.item then
 			t.name = t.item
@@ -1252,8 +1342,11 @@ function C.CurrentDungeon()
 		return C.index.byArea[map]
 	end
 	if type(name) == "string" then
+		local function Plain(x)
+			return (x or ""):lower():gsub("^the ", "")
+		end
 		for _, d in ipairs(C.index.dungeons) do
-			if d.name == name then
+			if Plain(d.name) == Plain(name) then
 				return d
 			end
 		end
@@ -1325,6 +1418,11 @@ function C.Waypoint(w, title, arrow)
 	if not map then
 		return false
 	end
+	return C.WaypointAt(map, x, y, title, arrow)
+end
+
+-- Same, for a point given as uiMapID and x, y (0-100).
+function C.WaypointAt(map, x, y, title, arrow)
 	local tomtom = _G.TomTom
 	if type(tomtom) == "table" and type(tomtom.AddWaypoint) == "function" then
 		local ok, uid = pcall(tomtom.AddWaypoint, tomtom, map, x / 100, y / 100,
@@ -1378,6 +1476,109 @@ function C.LogQuests()
 			end
 		end
 	end
+	return out
+end
+
+-- The My quests list: quests ready to turn in come first (any quest, chain
+-- or not), then the quests of chains and dungeons, lower level first.
+-- items: { {id=, ready=bool, level=number} }
+function C.LogOrder(items)
+	table.sort(items, function(a, b)
+		if (a.ready and true or false) ~= (b.ready and true or false) then
+			return a.ready and true or false
+		end
+		if (a.level or 0) ~= (b.level or 0) then
+			return (a.level or 0) < (b.level or 0)
+		end
+		return a.id < b.id
+	end)
+	return items
+end
+
+-- Classic's rule when the game does not say: grey at 5 levels below up to
+-- level 9, then the gap grows with your level.
+function C.GreyRange(level)
+	level = level or 1
+	if level <= 9 then
+		return 5
+	elseif level <= 39 then
+		return 5 + math.floor(level / 10)
+	elseif level <= 59 then
+		return 1 + math.floor(level / 5)
+	end
+	return 12
+end
+
+-- Why a quest in your log can be dropped without losing anything, or nil.
+--   q:       { id, ready, failed, chain, pos, dungeon }
+--   level:   your level; range: levels above a quest's at which it greys
+--   levelOf: id -> quest level
+-- Never a quest ready to turn in, never a step that leads to a quest
+-- that still gives proper experience.
+function C.DropReason(q, level, range, levelOf)
+	if q.ready then
+		return nil
+	end
+	if q.failed then
+		return "failed"
+	end
+	local function Grey(id)
+		local l = levelOf(id)
+		return type(l) == "number" and level - l > range
+	end
+	if not Grey(q.id) then
+		return nil
+	end
+	local chain, pos = q.chain or { q.id }, q.pos or 1
+	for i = pos + 1, #chain do
+		if not Grey(chain[i]) then
+			return nil -- it leads to something still worth doing
+		end
+	end
+	if q.dungeon and q.dungeon.max and q.dungeon.max > 0 and level > q.dungeon.max then
+		return "outgrown"
+	end
+	if #chain > pos then
+		return "chaingrey"
+	end
+	return "grey"
+end
+
+C.DROP_TEXT = {
+	failed = "Failed: it can no longer be finished",
+	grey = "Grey: little experience, and nothing comes after it",
+	chaingrey = "Grey, and so is everything after it in the chain",
+	outgrown = "You have outgrown its dungeon",
+}
+C.DROP_TAG = { failed = "failed", grey = "grey", chaingrey = "grey chain", outgrown = "outgrown" }
+
+-- Quests in your log you can drop: { {id, reason} }, lowest level first.
+function C.Droppable()
+	local P = C.player
+	local level = P.level()
+	local range = P.greyRange() or C.GreyRange(level)
+	local out = {}
+	for _, id in ipairs(C.LogQuests()) do
+		local chain, pos = C.ChainOf(id)
+		local q = {
+			id = id,
+			ready = C.Status(id) == "ready",
+			failed = P.failed(id),
+			chain = chain,
+			pos = pos,
+			dungeon = C.DungeonOf(id),
+		}
+		local why = C.DropReason(q, level, range, C.Level)
+		if why then
+			out[#out + 1] = { id = id, reason = why, level = C.Level(id) }
+		end
+	end
+	table.sort(out, function(a, b)
+		if (a.level or 0) ~= (b.level or 0) then
+			return (a.level or 0) < (b.level or 0)
+		end
+		return a.id < b.id
+	end)
 	return out
 end
 

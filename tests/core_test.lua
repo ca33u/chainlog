@@ -81,7 +81,11 @@ Check(C.ForMe(25), "profession quest shown with it (Russian client)")
 C.player.skills = nil
 
 local idx = C.Build()
-Check(#idx.dungeons == 1 and idx.dungeons[1].name == "Test Hold", "one dungeon; battleground skipped")
+local real = {}
+for _, d in ipairs(idx.dungeons) do
+	if d.area > 0 then real[#real + 1] = d end -- hand-added ones aside
+end
+Check(#real == 1 and real[1].name == "Test Hold", "one dungeon; battleground skipped")
 local d = idx.dungeons[1]
 Check(#d.quests == 3, "alt area quests count for the dungeon (3, 4, 7)")
 Check(C.DungeonOf(4) == d, "quest on the alt area maps to the dungeon")
@@ -181,6 +185,8 @@ do
 end
 
 -- guide: follow the chain 1 -> 2 -> 3
+LoadFile("Flights.lua")
+LoadFile("Route.lua")
 LoadFile("Guide.lua")
 local Gd = NS.Guide
 local added, removed = {}, 0
@@ -298,6 +304,13 @@ end
 local tip = { GetName = function() return "TipTest" end, NumLines = function() return #lines end }
 Check(MK.HighlightTooltip(tip) == 1 and lines[3]:find("» ", 1, true) and not lines[4]:find("»", 1, true), "your line in the tooltip is marked, others not")
 Check(MK.HighlightTooltip(tip) == 0, "marked only once")
+lines = { "Hatefury Shadowstalker", "Level 33", "[35] Crystal in the Mountains", "[33] Hate the Hatefury", "   2/2 Hatefury Shadowstalker slain", "[34] Other", "   1/8 Thing" }
+for i = 1, #lines do
+	_G["TipTestTextLeft" .. i] = { GetText = function() return lines[i] end, SetText = function(_, v) lines[i] = v end }
+end
+Check(MK.HighlightTooltip(tip) == 2 and lines[5]:find("|cff40ff40", 1, true) == 1 and lines[4]:find("|cff40ff40", 1, true) == 1, "finished objective and its quest title turn green")
+Check(not lines[3]:find("|cff40ff40", 1, true) and not lines[6]:find("|cff40ff40", 1, true) and not lines[7]:find("|cff40ff40", 1, true), "a quest you can pick up and unfinished ones stay as they are")
+Check(MK.HighlightTooltip(tip) == 0, "green only once")
 GetInstanceInfo = function() return "Elsewhere", "none" end
 Check(C.CurrentDungeon() == nil, "outside: no dungeon")
 
@@ -315,4 +328,106 @@ C.source.uiMap = function(area) return area == 12 and 1429 or nil end
 Check(NS.MapPin.Show({ area = 12, x = 40, y = 60 }, "Elder", "take") and opened == 1429, "click: world map opens on the zone")
 Check(NS.MapPin.target and NS.MapPin.target.x == 40 and NS.MapPin.target.kind == "take", "pin placed at the spot")
 Check(NS.MapPin.Show({ area = 999, x = 1, y = 1 }, "?", "take") == false, "unknown zone: no map")
+
+-- Route: fastest way with flights and ships (world yards; continent 0 and 1)
+local RT = NS.Route
+Check(#NS.FLIGHTS > 50, "flight masters from QuestieDB baked in")
+local function P(cont, x, y, extra) local p = { cont = cont, x = x, y = y }; for k, v in pairs(extra or {}) do p[k] = v end; return p end
+local fmA, fmB = P(0, 100, 0, { flight = true, name = "A" }), P(0, 9000, 0, { flight = true, name = "B" })
+local r = RT.Plan(P(0, 0, 0), P(0, 9100, 0), { flights = { fmA, fmB }, run = 7 })
+Check(r and #r.legs == 3 and r.legs[1].mode == "run" and r.legs[2].mode == "fly" and r.legs[3].mode == "run", "far away: run to the master, fly, run")
+Check(r.time < r.direct and r.direct > 1200, "the flight is faster than running")
+Check(RT.Current(r) == r.legs[1], "first: run to the master")
+Check(RT.Lines(r) and #RT.Lines(r) == 4, "three steps and the time")
+r = RT.Plan(P(0, 100, 5), P(0, 9100, 0), { flights = { fmA, fmB }, run = 7 })
+local leg, i = RT.Current(r)
+Check(leg.mode == "fly" and i == 2, "standing at the master: the flight is next")
+r = RT.Plan(P(0, 0, 0), P(0, 600, 0), { flights = { fmA, P(0, 650, 0, { flight = true }) }, run = 7 })
+Check(#r.legs == 1 and r.legs[1].mode == "run", "close: just run")
+r = RT.Plan(P(0, 0, 0), P(0, 9100, 0), { flights = {}, run = 7 })
+Check(#r.legs == 1, "no flight points known: run")
+local dockA, dockB = P(0, 500, 0, { name = "Dock A" }), P(1, 0, 0, { name = "Dock B" })
+r = RT.Plan(P(0, 0, 0), P(1, 300, 0), { ships = { { kind = "zeppelin", a = dockA, b = dockB } }, run = 7 })
+Check(r and #r.legs == 3 and r.legs[2].mode == "zeppelin" and r.direct == nil, "other continent: zeppelin")
+Check(RT.Say(r.legs[2]) == "Zeppelin to Dock B", "leg wording")
+Check(RT.Title(r, 2, RT.Say(r.legs[2]), "Turn in: X") == "Zeppelin to Dock B, then run 300 yd\nTurn in: X", "arrow title: this step, what comes next, the quest on its own line")
+r = RT.Plan(P(0, 0, 0), P(0, 9100, 0), { flights = { fmA, fmB }, run = 7 })
+Check(RT.Title(r, 1, RT.Say(r.legs[1]), "Q"):find("^Run to the flight master: A, then fly to B\n"), "running to the master: says where you fly next")
+Check(RT.Plan(P(0, 0, 0), P(1, 300, 0), { run = 7 }) == nil, "other continent and no ship: no route")
+-- learning flight points from the world map: only nodes marked discovered
+C_TaxiMap = { GetTaxiNodesForMap = function()
+	local function V(x, y) return { GetXY = function() return x, y end } end
+	return { { isUndiscovered = false, position = V(0.5, 0.5) }, { isUndiscovered = true, position = V(0.1, 0.1) }, { position = V(0.2, 0.2) } }
+end }
+local learnedAt = {}
+local saveWorldOf, saveMapInfo = RT.WorldOf, C_Map and C_Map.GetMapInfo
+C_Map = C_Map or {}
+C_Map.GetMapInfo = function(m) return { mapType = 2, name = "c" .. m } end
+RT.WorldOf = function(_, x, y) learnedAt[#learnedAt + 1] = { x, y }; return nil end
+pcall(RT.LearnFromWorldMap, true)
+Check(#learnedAt == #RT.CONTINENT_MAPS and learnedAt[1][1] == 50, "world map: only discovered flight points are learned, on every continent")
+RT.WorldOf, C_Map.GetMapInfo, C_TaxiMap = saveWorldOf, saveMapInfo, nil
+-- Can drop: quests nothing depends on anymore
+local LV = { [1] = 20, [2] = 22, [3] = 34, [4] = 21, [5] = 30 }
+local function lv(id) return LV[id] end
+local R = C.GreyRange(34) -- 8
+Check(R == 8, "grey range at 34: 8 levels")
+Check(C.DropReason({ id = 1 }, 34, R, lv) == "grey", "grey quest, nothing after it: drop")
+Check(C.DropReason({ id = 5 }, 34, R, lv) == nil, "a quest still giving experience: keep")
+Check(C.DropReason({ id = 1, ready = true }, 34, R, lv) == nil, "ready to turn in: never drop")
+Check(C.DropReason({ id = 1, chain = { 1, 2, 3 }, pos = 1 }, 34, R, lv) == nil, "grey step that leads to a quest worth doing: keep")
+Check(C.DropReason({ id = 1, chain = { 1, 4 }, pos = 1 }, 34, R, lv) == "chaingrey", "the whole rest of the chain is grey: drop")
+Check(C.DropReason({ id = 1, dungeon = { max = 25 } }, 34, R, lv) == "outgrown", "dungeon outgrown: drop")
+Check(C.DropReason({ id = 5, failed = true }, 34, R, lv) == "failed", "failed: drop")
+
+-- My quests: ready to turn in first, then by level
+local order = C.LogOrder({
+	{ id = 1, level = 10 },
+	{ id = 2, level = 30, ready = true },
+	{ id = 3, level = 5 },
+	{ id = 4, level = 12, ready = true },
+})
+Check(order[1].id == 4 and order[2].id == 2, "my quests: ready to turn in come first, lower level first")
+Check(order[3].id == 3 and order[4].id == 1, "my quests: the rest by level")
+
+-- The Drowned City: not in QuestieDB's dungeon list, added by Chainlog;
+-- its Horde chain is linked by C.QUEST_FIX (the data has no links yet)
+local H = 8589934770
+QUESTS[629] = { name = "The Vile Reef", questLevel = 37, requiredLevel = 30, requiredRaces = H, zoneOrSort = 33, startedBy = { { 2519 } } }
+QUESTS[95748] = { name = "The Gurubashi Legends of Old", questLevel = 40, requiredLevel = 30, requiredRaces = H, zoneOrSort = 33 }
+QUESTS[95770] = { name = "Locating the Lost City", questLevel = 40, requiredLevel = 30, requiredRaces = H, zoneOrSort = 33 }
+QUESTS[95775] = { name = "The Drowned City", questLevel = 40, requiredLevel = 30, requiredRaces = H }
+QUESTS[95773] = { name = "Enemies in the Water", questLevel = 37, requiredLevel = 30, requiredRaces = H, zoneOrSort = 33 }
+QUESTS[95776] = { name = "The Only Good Brinescale...", questLevel = 38, requiredLevel = 30, requiredRaces = H }
+local dc
+for _, d in ipairs(C.Build().dungeons) do
+	if d.name == "The Drowned City" then dc = d end
+end
+Check(dc and dc.min == 35 and dc.max == 40, "The Drowned City is in the dungeon list, 35-40")
+Check(dc and dc.entrances[1][1] == 33, "its entrance is in Stranglethorn")
+local seen = {}
+for _, chain in ipairs(dc and C.DungeonChains(dc) or {}) do
+	for _, id in ipairs(chain) do seen[id] = true end
+end
+Check(seen[629] and seen[95748] and seen[95770] and seen[95775], "its chain starts at The Vile Reef in Grom'gol")
+Check(seen[95773] and seen[95776], "Enemies in the Water leads to The Only Good Brinescale...")
+Check(C.Status(95748) == "locked", "Legends of Old waits for The Vile Reef")
+
+-- inside: QuestieDB has no drops for the tablets, so the checklist is hand-written
+GetInstanceInfo = function() return "Drowned City", "party", 1, "", 5, 0, false, 9998 end
+local inLog0 = C.player.inLog
+C.player.inLog = function(id) return id == 95775 or id == 95776 end
+local here = C.CurrentDungeon()
+Check(here and here.name == "The Drowned City", "inside, found by its name even without \"The\"")
+local tg = here and C.DungeonTargets(here, C.DungeonChains(here)) or {}
+local tablets, varTaka, hint = 0, false, nil
+for _, t in ipairs(tg) do
+	if t.name:find("Tablet of I'lalai") then tablets = tablets + 1; hint = hint or t.hint end
+	if t.name == "Var'Taka" and t.kind == "kill" then varTaka = true end
+end
+Check(tablets == 4 and hint == "past Zul'Alai", "checklist: four tablets, with where they are")
+Check(varTaka, "checklist: kill Var'Taka for The Only Good Brinescale...")
+Check(#tg == 5, "checklist: nothing for quests you don't have")
+C.player.inLog = inLog0
+
 Report("core_test")
