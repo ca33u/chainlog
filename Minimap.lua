@@ -12,7 +12,7 @@ local T = ns.T
 local M = {}
 ns.Minimap = M
 
-local ICON = "Interface\\AddOns\\Chainlog\\Media\\minimap"
+local ICON = "Interface\\AddOns\\Chainlog\\Media\\minimap.blp"
 
 local function IsSecret(v)
 	return issecretvalue and issecretvalue(v) and true or false
@@ -76,10 +76,9 @@ local function Create()
 	icon:SetSize(17, 17)
 	icon:SetPoint("TOPLEFT", 7, -6)
 	icon:SetTexture(ICON)
-	icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-	if icon.SetMask then
-		pcall(icon.SetMask, icon, "Interface\\CharacterFrame\\TempPortraitAlphaMask")
-	end
+	-- the picture is already round (transparent corners): a mask texture
+	-- (SetMask) draws it as scrambled stripes on Forever
+	icon:SetTexCoord(0, 1, 0, 1)
 
 	local border = btn:CreateTexture(nil, "OVERLAY")
 	border:SetSize(53, 53)
